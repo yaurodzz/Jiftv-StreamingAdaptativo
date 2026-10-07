@@ -1,0 +1,79 @@
+services:
+  # Nginx-RTMP + FFmpeg: recebe o OBS, gera HLS/DASH e grava cada transmissão inteira.
+  # É o único serviço que os espectadores acessam (vídeo), além do Firebase (site e dados).
+  media:
+    build: ./server
+    image: jiftv-media:latest
+    container_name: jiftv-media
+    restart: unless-stopped
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+    ports:
+      - "${RTMP_PORT:-1935}:1935"   # OBS / DroidCam
+      - "${HTTP_PORT:-8080}:80"     # HLS, DASH, miniaturas e gravações
+    volumes:
+      # Pasta local com as gravações completas (backup independente do Cloudinary)
+      - ${RECORDINGS_DIR:-./gravacoes}:/recordings
+    tmpfs:
+      # Segmentos HLS/DASH e miniaturas ao vivo são temporários: ficam na memória
+      - /var/www/hls:mode=1777
+      - /var/www/dash:mode=1777
+      - /var/www/thumbs:mode=1777
+
+  # Worker (Python): liga o servidor de mídia ao Firebase.
+  # Valida as chaves do OBS, marca transmissões ao vivo, registra as gravações no
+  # Firestore, envia ao Cloudinary e executa os pedidos do painel.
+  # Só faz conexões de saída para o Firebase: funciona atrás do roteador da escola.
+  api:
+    build: ./api
+    image: jiftv-api:latest
+    container_name: jiftv-api
+    restart: unless-stopped
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      MEDIA_INTERNAL_URL: http://media:8081
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-service-account.json
+    volumes:
+      - ${RECORDINGS_DIR:-./gravacoes}:/recordings
+      - ./secrets:/secrets:ro
+
+  # Emuladores do Firebase para desenvolvimento (docker compose --profile dev up)
+  emulators:
+    profiles: ["dev"]
+    build: ./emulators
+    image: jiftv-emulators:latest
+    container_name: jiftv-emulators
+    restart: unless-stopped
+    ports:
+      - "4000:4000"   # interface dos emuladores
+      - "4400:4400"
+      - "8085:8085"   # Firestore
+      - "9099:9099"   # Auth
+      - "9150:9150"
+    volumes:
+      - ./firebase.json:/projeto/firebase.json:ro
+      - ./firestore.rules:/projeto/firestore.rules:ro
+      - ./firestore.indexes.json:/projeto/firestore.indexes.json:ro
+      - jiftv-emuladores:/dados
+
+  # Túnel HTTPS da Cloudflare para publicar o servidor de mídia na internet
+  # (docker compose --profile tunel up). Precisa de CLOUDFLARE_TUNNEL_TOKEN no .env.
+  tunnel:
+    profiles: ["tunel"]
+    image: cloudflare/cloudflared:latest
+    container_name: jiftv-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+
+volumes:
+  jiftv-emuladores:

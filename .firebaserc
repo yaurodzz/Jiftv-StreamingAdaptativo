@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "jiftv-stream",
+    "dev": "demo-jiftv"
+  }
+}

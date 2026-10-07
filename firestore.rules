@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// Modelo de confiança do JIFTv
+// - Visitantes só LEEM o que é público (modalidades, transmissões, gravações visíveis).
+// - O painel (usuário com custom claim { admin: true }) escreve direto no Firestore.
+// - O worker local (servidor de mídia) usa o Firebase Admin SDK, que ignora estas regras:
+//   marca transmissões ao vivo, registra gravações, envia ao Cloudinary e executa comandos.
+// - A chave de transmissão do OBS fica em `streamKeys`, que só o admin lê.
+//   (No modelo antigo ela ficava em `streams`, legível por qualquer um.)
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Modalidades: leitura pública (catálogo e filtros); escrita pelo painel.
+    match /modalities/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Transmissões: leitura pública (página ao vivo, agenda, placar).
+    // Não contém a chave do OBS.
+    match /streams/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Chaves de transmissão: somente o painel.
+    match /streamKeys/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // Gravações: o público lê apenas as visíveis. Qualquer visitante pode somar 1
+    // ao contador de visualizações; o resto só o painel altera.
+    match /vods/{id} {
+      allow read: if resource.data.visible == true || isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        resource.data.visible == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
+        && request.resource.data.views == resource.data.get('views', 0) + 1
+      );
+    }
+
+    // Estado do servidor de mídia e histórico de atividades (escritos pelo worker).
+    match /system/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /events/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Pedidos do painel para o worker (excluir arquivo local, ler logs, reverificar pasta).
+    match /commands/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.type in ['delete_vod', 'resync', 'logs'];
+      allow update, delete: if false;
+    }
+
+    // ---- Atletas e scout (mesma leitura pública do sistema anterior) ----
+
+    // Turmas: leitura pública (o formulário de cadastro lista as turmas); escrita pelo painel.
+    match /classes/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Atletas: o público lê SÓ os aprovados. O cadastro público passa pelo worker
+    // (POST /api/atletas: validação + limite por IP + status "pending"); a moderação
+    // (aprovar, rejeitar, editar, remover) é feita pelo painel.
+    match /athletes/{id} {
+      allow read: if resource.data.status == "approved" || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Eventos de scout: leitura pública (perfil do atleta agrega no navegador);
+    // marcados pelo painel na tela de scout.
+    match /scoutEvents/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Qualquer coleção não mapeada: fechada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

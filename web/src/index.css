@@ -1,0 +1,121 @@
+@import "@fontsource-variable/inter/index.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   Tokens do design system JIFTv (Verde IF).
+   Os valores são triplas R G B para casar com bg-<token>/<alpha>.
+   ------------------------------------------------------------------ */
+@layer base {
+  :root {
+    --bg:       248 250 252; /* #F8FAFC */
+    --surface:  255 255 255; /* #FFFFFF */
+    --elevated: 241 245 249; /* #F1F5F9 */
+    --line:     226 232 240; /* #E2E8F0 */
+    --fg:        15  23  42; /* #0F172A */
+    --muted:     71  85 105; /* #475569 */
+    --accent:    47 158  65; /* #2F9E41  Verde IF */
+    --live:     239  68  68; /* #EF4444 */
+    --warn:     180  83   9; /* #B45309  avisos (disco cheio, falha de envio) */
+  }
+
+  .dark {
+    --bg:        15  23  42; /* #0F172A */
+    --surface:   20  30  52; /* #141E34 */
+    --elevated:  30  41  59; /* #1E293B */
+    --line:      43  56  80; /* #2B3850 */
+    --fg:       241 245 249; /* #F1F5F9 */
+    --muted:    148 163 184; /* #94A3B8 */
+    --accent:    61 190  82; /* #3DBE52 */
+    --live:     239  68  68;
+    --warn:     245 165  36; /* #F5A524 */
+  }
+
+  html {
+    font-family: theme("fontFamily.sans");
+    background-color: rgb(var(--bg));
+    color: rgb(var(--fg));
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    color-scheme: light;
+  }
+  html.dark { color-scheme: dark; }
+
+  body { background-color: rgb(var(--bg)); color: rgb(var(--fg)); }
+
+  h1, h2, h3, h4 { font-family: theme("fontFamily.display"); letter-spacing: -0.02em; }
+
+  ::selection { background: rgb(var(--accent) / 0.35); color: rgb(var(--fg)); }
+
+  /* Foco visível consistente para navegação por teclado. */
+  :where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--bg)), 0 0 0 4px rgb(var(--accent));
+    border-radius: 0.5rem;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Utilitários compostos.
+   ------------------------------------------------------------------ */
+@layer components {
+  .glass {
+    background-color: rgb(var(--surface) / 0.72);
+    backdrop-filter: saturate(140%) blur(12px);
+    -webkit-backdrop-filter: saturate(140%) blur(12px);
+    border-color: rgb(var(--line) / 0.6);
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium
+           text-white transition-transform hover:brightness-110 active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm
+           font-medium text-fg transition-colors hover:bg-elevated;
+  }
+  .card {
+    @apply overflow-hidden rounded-2xl border border-line bg-surface transition-colors
+           hover:border-accent/40;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg
+           placeholder:text-muted focus:border-accent;
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-2 rounded-full border border-live/40 bg-live/10 px-5 py-2.5
+           text-sm font-medium text-live transition-colors hover:bg-live hover:text-white;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  .icon-btn {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors
+           hover:bg-elevated hover:text-fg disabled:opacity-40;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium text-muted;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+}
+
+/* Transição de tema em círculo (View Transitions API) — ver ThemeProvider. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Respeito à preferência de menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
