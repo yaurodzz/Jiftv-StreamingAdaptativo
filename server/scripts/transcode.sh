@@ -48,14 +48,17 @@ log "transcodificação iniciada: ${NAME} (${QS[*]})"
 
 # O muxer "tee" reaproveita os mesmos quadros codificados para todas as saídas,
 # então cada qualidade é codificada só uma vez.
+# Sem "-tune zerolatency": com quatro qualidades ele deixava o encoder abaixo do tempo
+# real (0,8x) e o vídeo travava para quem assiste. O atraso extra (menos de 1 s) não pesa
+# no HLS/DASH. "aresample=async=1" acerta o relógio do áudio que chega pelo RTMP.
 exec ffmpeg -nostdin -hide_banner -loglevel warning \
     -i "$IN" \
     -filter_complex "$filter" \
-    -c:v libx264 -preset "${X264_PRESET:-veryfast}" -tune zerolatency \
-    -profile:v main -pix_fmt yuv420p \
+    -c:v libx264 -preset "${X264_PRESET:-veryfast}" \
+    -profile:v main -pix_fmt yuv420p -bf 0 \
     -sc_threshold 0 -force_key_frames "expr:gte(t,n_forced*2)" \
     "${maps[@]}" \
-    -map "0:a:0?" -c:a aac -b:a "${AUDIO_BITRATE:-128k}" -ar 48000 -ac 2 \
+    -map "0:a:0?" -c:a aac -b:a "${AUDIO_BITRATE:-128k}" -ar 48000 -ac 2 -af aresample=async=1 \
     -flags +global_header \
     -f tee "$outputs" \
     -map "[thumb]" -c:v mjpeg -q:v 5 -f image2 -update 1 -atomic_writing 1 "$THUMB" \

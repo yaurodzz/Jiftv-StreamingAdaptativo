@@ -316,6 +316,17 @@ Tudo abaixo foi executado nos **emuladores locais** com um FFmpeg simulando o OB
   visitantes; formulário no modo matrícula pela interface; painel mostra a matrícula e "confere com o cadastro";
   aprovar e ver na vitrine; card "Site institucional" em Painel → Sistema.
 
+- **Streaming adaptativo e travamentos (2026-10-11)**: conferido no container `media` que o HLS sai com as 4
+  qualidades (playlist mestre com 1080p/720p/480p/240p, segmentos de 2 s alinhados entre elas, cada um começando
+  em quadro-chave) e o DASH com 4 vídeos + áudio. A causa dos travamentos era o `-tune zerolatency` no
+  `transcode.sh`: com 4 qualidades o FFmpeg codificava a 0,8x do tempo real (24 de 30 fps num sinal 1080p30,
+  mesmo com 16 núcleos), o vídeo atrasava e o player ficava sem buffer. Sem ele (e com `-bf 0`) passa a 1,0x em
+  tempo real, com folga de 2,5x. `-af aresample=async=1` acabou com o aviso `Packet duration: -8 ... out of range`
+  do DASH (relógio do áudio vindo do RTMP). Os avisos `[flv] Failed to update header` aparecem no fim de toda
+  transmissão e são inofensivos. Medido com uma gravação real reenviada em FLV para a aplicação `hls`
+  (sem passar pelo worker); **falta confirmar com OBS/DroidCam ao vivo**. O script novo foi copiado para o
+  container em execução (`docker cp`), então vale já na próxima transmissão, e entra na imagem no próximo build.
+
 Dados de teste que existem hoje nos emuladores (volume `jiftv-emuladores`): modalidade Futsal (FUT), turma
 3B-INFO, transmissões "Final do Futsal", "Legado Vôlei" e "Semifinal de Vôlei Feminino", atletas Ana Souza e
 Bruno Lima (aprovados), 5 eventos de scout, 6 gravações (251 MB em `gravacoes/videos`). Login de teste:
