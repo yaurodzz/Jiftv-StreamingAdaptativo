@@ -8,8 +8,7 @@ import { currentIdToken } from "../providers/AuthProvider.jsx";
 import { useToast } from "../features/admin/ToastProvider.jsx";
 import { ToastProvider } from "../features/admin/ToastProvider.jsx";
 import { createPlayer } from "../player/createPlayer.js";
-import { cldAvatar } from "../lib/cloudinary.js";
-import { vodSource, vodThumb } from "../lib/media.js";
+import { athletePhoto, vodSource, vodThumb } from "../lib/media.js";
 
 // /scout/:vodId — ferramenta interna (admin) para marcar eventos sobre uma gravação.
 // Fluxo: escolher atleta → tocar/pausar o vídeo → clicar no evento.
@@ -164,8 +163,8 @@ function ScoutPage() {
   const typeLabel = (code) => scoutTypes.find((t) => t.code === code)?.label || code;
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-6 md:py-8">
-      <nav aria-label="Trilha de navegação" className="mb-3 text-xs text-muted">
+    <section className="mx-auto max-w-7xl px-4 pb-6 pt-2 md:py-8">
+      <nav aria-label="Trilha de navegação" className="crumbs md:mb-3">
         <Link to="/admin/gravacoes" className="hover:text-fg">Painel</Link>
         <span className="mx-2">/</span>
         <Link to={`/partidas/${vod.id}`} className="hover:text-fg">{vod.modality}</Link>
@@ -216,7 +215,7 @@ function ScoutPage() {
                   <li key={e.id} className="flex items-center gap-3 py-2">
                     <button
                       onClick={() => seekTo(e.videoTime)}
-                      className="w-14 shrink-0 rounded-md bg-elevated py-1 text-center font-mono text-xs text-fg hover:bg-accent hover:text-white"
+                      className="w-14 shrink-0 rounded-md bg-elevated py-1 text-center font-mono text-xs text-fg hover:bg-accent hover:text-white max-md:min-h-11 max-md:w-16"
                       aria-label={`Ir para ${fmtTime(e.videoTime)}`}
                     >
                       {fmtTime(e.videoTime)}
@@ -230,7 +229,7 @@ function ScoutPage() {
                     </div>
                     <button
                       onClick={() => removeEvent(e.id)}
-                      className="rounded-md px-2 py-1 text-xs text-muted hover:bg-live/10 hover:text-live"
+                      className="rounded-md px-2 py-1 text-xs text-muted hover:bg-live/10 hover:text-live max-md:min-h-11 max-md:px-3"
                       aria-label="Remover evento"
                     >
                       remover
@@ -267,16 +266,16 @@ function ScoutPage() {
                       <button
                         onClick={() => setSelectedId(a.id)}
                         className={
-                          "flex w-full items-center gap-2 rounded-xl border px-2 py-1.5 text-left transition " +
+                          "flex w-full items-center gap-2 rounded-xl border px-2 py-1.5 text-left transition max-md:min-h-11 " +
                           (active
                             ? "border-accent bg-accent/10 text-fg"
                             : "border-line hover:border-accent/50")
                         }
                       >
                         <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-elevated">
-                          {a.photoUrl ? (
+                          {athletePhoto(a, 64) ? (
                             <img
-                              src={cldAvatar(a.photoUrl, { size: 64 })}
+                              src={athletePhoto(a, 64)}
                               alt=""
                               width={64}
                               height={64}
@@ -323,7 +322,7 @@ function ScoutPage() {
                     key={t.code}
                     onClick={() => submitEvent(t)}
                     disabled={submittingType === t.code}
-                    className="group flex flex-col items-start rounded-xl border border-line px-3 py-2 text-left transition hover:border-accent hover:bg-accent/5 disabled:opacity-60"
+                    className="group flex flex-col items-start rounded-xl border border-line px-3 py-2 text-left transition hover:border-accent hover:bg-accent/5 disabled:opacity-60 max-md:min-h-14 max-md:justify-center"
                   >
                     <span className="text-sm font-medium">{t.label}</span>
                     <span className="mt-0.5 font-mono text-[10px] text-muted group-hover:text-accent">

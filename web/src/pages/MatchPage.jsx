@@ -75,8 +75,8 @@ export default function MatchPage() {
   const download = vod.localFile && vod.localAvailable !== false ? recordingUrl(vod.localFile, vod.visible ? null : token) : null;
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-8 md:py-10">
-      <nav aria-label="Trilha de navegação" className="mb-4 text-xs text-muted">
+    <section className="mx-auto max-w-6xl px-4 pb-8 pt-2 md:py-10">
+      <nav aria-label="Trilha de navegação" className="crumbs">
         <Link to="/catalogo" className="hover:text-fg">Catálogo</Link>
         <span className="mx-2">/</span>
         <span className="text-fg">{vod.modality || "Gravação"}</span>
@@ -88,20 +88,20 @@ export default function MatchPage() {
         </p>
       )}
 
-      <div className="mx-auto max-w-[min(100%,calc((100vh-260px)*16/9))]">
+      <div className="player-fit mx-auto max-md:mx-[-1rem] max-md:max-w-none">
         {src ? (
-          <VodPlayer src={src} poster={vodThumb(vod, token)} onPlay={onPlay} />
+          <VodPlayer src={src} poster={vodThumb(vod, token)} onPlay={onPlay} className="max-md:rounded-none max-md:border-x-0" />
         ) : (
-          <div className="grid aspect-video place-items-center rounded-2xl border border-line bg-surface px-6 text-center text-muted">
+          <div className="grid aspect-video place-items-center rounded-2xl border border-line bg-surface px-6 text-center text-muted max-md:rounded-none max-md:border-x-0">
             {isPlayable(vod) ? "Carregando…" : "O arquivo desta gravação não está disponível no momento."}
           </div>
         )}
       </div>
 
-      <header className="mx-auto mt-5 flex max-w-[min(100%,calc((100vh-260px)*16/9))] flex-wrap items-start justify-between gap-4">
+      <header className="player-fit mx-auto mt-5 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm text-accent">{vod.modality || "Gravação"}</p>
-          <h1 className="mt-1 text-2xl font-semibold md:text-3xl">{vod.title}</h1>
+          <h1 className="mt-1 break-words text-2xl font-semibold md:text-3xl">{vod.title}</h1>
           <p className="mt-2 text-sm text-muted">
             Gravada em <span className="text-fg">{formatDateTime(vod.recordedAt) || "data indisponível"}</span>
             {duration && <> · duração <span className="text-fg">{duration}</span></>}
@@ -109,7 +109,7 @@ export default function MatchPage() {
             <> · <Eye size={13} className="inline -mt-0.5" /> {formatNumber(vod.views)}</>
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 max-sm:w-full max-sm:[&>*]:flex-1 max-sm:[&>*]:justify-center">
           <button type="button" onClick={() => clip.copy(window.location.href)} className="btn-ghost">
             <Link2 size={15} /> {clip.copied ? "Link copiado" : "Copiar link"}
           </button>
@@ -121,13 +121,13 @@ export default function MatchPage() {
         </div>
       </header>
 
-      <div className="mx-auto mt-4 grid max-w-[min(100%,calc((100vh-260px)*16/9))] gap-4 md:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="player-fit mx-auto mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_320px]">
         {vod.description ? <p className="whitespace-pre-line text-muted">{vod.description}</p> : <span />}
         {(vod.teamA || vod.teamB) && <Scoreboard stream={vod} />}
       </div>
 
       {siblings.length > 0 && (
-        <section className="mt-14">
+        <section className="mt-10 md:mt-14">
           <h2 className="mb-4 text-lg font-semibold">
             Mais de {vod.modality}
             <span className="ml-2 text-sm font-normal text-muted">{siblings.length}</span>

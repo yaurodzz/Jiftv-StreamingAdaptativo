@@ -39,7 +39,10 @@ internet, e por HTTPS, porque o site no Firebase Hosting é HTTPS.
 firebase.json, .firebaserc       Hosting (web/dist), regras e índices do Firestore, emuladores
 firestore.rules                  quem pode ler/escrever o quê (visitante, admin)
 firestore.indexes.json           índices do catálogo, da vitrine de atletas e da linha do tempo do scout
-docs/cloudinary-preset.md        preset do Cloudinary para as fotos dos atletas
+docs/cloudinary-preset.md        preset do Cloudinary (fotos de atletas por upload)
+docs/integracao-site-institucional.md   fotos dos atletas pela matrícula, na API do site do professor
+docs/dominio-cloudflare.md       domínio jiftv.org, túnel da Cloudflare, Firebase Hosting, CORS
+tools/mock_institucional.py      API de mentira do site institucional (só desenvolvimento)
 docker-compose.yml               media, api, emulators (perfil dev), tunnel (perfil tunel)
 server/                          container "media": nginx.conf + scripts de transcodificação e gravação
 api/                             container "api": worker Python
@@ -91,15 +94,23 @@ Os dados dos emuladores ficam no volume `jiftv-emuladores` (exportados ao parar 
      `secrets/firebase-service-account.json` (a pasta está no `.gitignore`).
    - `CLOUDINARY_URL` (opcional) e `docker compose up -d --build`.
    - Dê acesso ao painel: `docker compose exec api python -m app.cli admin seu@email` (depois saia e entre de novo).
-3. **Vídeo por HTTPS** (túnel da Cloudflare, gratuito):
-   - Cloudflare Zero Trust → Networks → Tunnels → criar túnel → copie o token para `CLOUDFLARE_TUNNEL_TOKEN` no `.env`.
-   - Em *Public hostname*, aponte `midia.seudominio.org` para o serviço `http://media:80`.
+3. **Vídeo e backend por HTTPS** (túnel da Cloudflare `jiftv`, já criado). Subdomínios do **jiftv.org**:
+   `live.jiftv.org` (streaming) e `api.jiftv.org` (`/api/*` do worker), os dois apontando para `http://media:80`
+   (detalhes em [docs/dominio-cloudflare.md](docs/dominio-cloudflare.md)):
+   - Credencial do túnel em `secrets/cloudflared-tunel.json` (cópia de `%USERPROFILE%\.cloudflared\<id>.json`);
+     rotas em `cloudflared/config.yml`.
+   - O túnel é **gerenciado pelo painel** da Cloudflare: em Zero Trust → Networks → Tunnels → `jiftv` →
+     *Public hostname*, os dois nomes precisam apontar para `http://media:80`.
    - `docker compose --profile tunel up -d`
 4. **Site** (`web/.env`, a partir de `web/.env.example`):
-   - Configuração Web do Firebase (`VITE_FIREBASE_*`), `VITE_MEDIA_URL=https://midia.seudominio.org`
-     e `VITE_RTMP_URL=rtmp://<IP ou domínio da escola>:1935/live`.
-   - Para o cadastro de atletas: `VITE_CLOUDINARY_CLOUD_NAME` e o preset `athletes_profile`
-     ([docs/cloudinary-preset.md](docs/cloudinary-preset.md)).
+   - Configuração Web do Firebase (`VITE_FIREBASE_*`). Os endereços de produção (`VITE_MEDIA_URL=https://live.jiftv.org`,
+     `VITE_API_URL=https://api.jiftv.org`) já estão em `web/.env.production`; defina também
+     `VITE_RTMP_URL=rtmp://<IP ou domínio da escola>:1935/live`.
+   - Só se o cadastro de atletas for por **upload** de foto: `VITE_CLOUDINARY_CLOUD_NAME` e o preset
+     `athletes_profile` ([docs/cloudinary-preset.md](docs/cloudinary-preset.md)). Pela matrícula não precisa.
+   - O site é publicado em `jiftv.org` (domínio personalizado do Firebase Hosting; veja
+     [docs/dominio-cloudflare.md](docs/dominio-cloudflare.md)). O worker só aceita chamadas desse site
+     (`CORS_ORIGINS`).
    - Publicar: `cd web && npm run build && cd .. && firebase deploy --only hosting,firestore`
      (na primeira vez, `npm install -g firebase-tools` e `firebase login`).
 
@@ -135,13 +146,19 @@ token do admin, tanto no Firestore (regras) quanto no servidor de mídia (`auth_
 
 ## Atletas e scout
 
-- **Cadastro público** (`/atletas/novo`): qualquer pessoa envia o perfil de um atleta. A foto vai direto do
-  navegador para o Cloudinary (preset *unsigned* `athletes_profile`, ver [docs/cloudinary-preset.md](docs/cloudinary-preset.md))
-  e os dados vão para o worker (`POST /api/atletas`). O worker valida os campos, limita a 10 envios por minuto
-  por IP e grava sempre com `status: "pending"`. Como passa pelo servidor da escola, o formulário só funciona com
-  ele ligado.
+- **Cadastro público** (`/atletas/novo`): qualquer pessoa envia o perfil de um atleta. Os dados vão para o
+  worker (`POST /api/atletas`), que valida os campos, limita os envios por IP e grava sempre com
+  `status: "pending"`. Como passa pelo servidor da escola, o formulário só funciona com ele ligado.
+  A **foto** vem de uma de duas origens (`ATLETAS_PHOTO_SOURCE`):
+  - **pela matrícula escolar** (padrão quando `INSTITUCIONAL_API_URL` está definida): a pessoa informa a
+    matrícula e o worker busca a foto na **API do site institucional** (feito pelo professor). A foto não passa
+    pelo navegador, e a matrícula fica num documento privado (`athletePrivate`), nunca no perfil público.
+    Guia, contrato assumido e perguntas para o professor: [docs/integracao-site-institucional.md](docs/integracao-site-institucional.md);
+  - **por upload**: a pessoa envia a foto direto ao Cloudinary (preset *unsigned* `athletes_profile`,
+    [docs/cloudinary-preset.md](docs/cloudinary-preset.md)).
 - **Moderação** (Painel → Atletas): aprovar, corrigir dados, rejeitar com motivo (fica registrado) ou remover
-  spam. O selo da aba mostra quantos cadastros esperam aprovação.
+  spam. O selo da aba mostra quantos cadastros esperam aprovação. Nos cadastros por matrícula, o painel mostra a
+  matrícula e avisa quando o nome digitado não bate com o do cadastro institucional.
 - **Turmas** (Painel → Turmas): as opções do formulário de cadastro.
 - **Tipos de scout** (Painel → Modalidades → Scout): o vocabulário de cada esporte (ex.: `gol`, `assistencia`,
   `falta`), com peso para futuras médias.

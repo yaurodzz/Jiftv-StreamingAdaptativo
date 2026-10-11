@@ -1,25 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { UploadCloud, Check } from "lucide-react";
+import { UploadCloud, Check, GraduationCap } from "lucide-react";
 import { subscribeModalities } from "../services/modalities.js";
 import { subscribeClasses } from "../services/classes.js";
-import { submitAthlete } from "../services/publicApi.js";
+import { getAthleteConfig, submitAthlete } from "../services/publicApi.js";
 import { uploadAthletePhoto, validatePhotoFile } from "../lib/uploadPhoto.js";
 import { computeAge } from "../features/athletes/format.js";
 
-// /atletas/novo — formulário público de submissão. Envia direto para o Cloudinary
-// (foto) e depois para POST /public/athletes/submit (dados). Fica pendente
-// até um admin aprovar; só então aparece na vitrine.
+// /atletas/novo — formulário público de submissão. Fica pendente até um admin aprovar;
+// só então aparece na vitrine.
 //
-// Validações client-side espelham as do backend (Zod) — a rede segue sendo
-// a fonte de verdade, mas evitamos requests inúteis.
+// A foto vem de uma de duas origens, definida pelo worker (GET /api/atletas/config):
+//   institucional  a pessoa informa a matrícula escolar e o worker busca a foto na API do
+//                  site institucional (a foto nunca passa pelo navegador)
+//   upload         a pessoa envia a foto direto ao Cloudinary (preset unsigned)
+// Os dados vão para POST /api/atletas do worker.
+//
+// Validações client-side espelham as do servidor — ele segue sendo a fonte de verdade,
+// mas evitamos requests inúteis.
 
 const INITIAL = {
   name: "", nickname: "", birthDate: "",
   jerseyNumber: "", position: "", bio: "",
-  modalityCode: "", classId: "",
+  modalityCode: "", classId: "", matricula: "",
   submittedByName: "", submittedByEmail: "",
 };
+
+const MATRICULA = /^[0-9A-Za-z]{4,20}$/;
 
 export default function AthleteSubmit() {
   const navigate = useNavigate();
@@ -32,11 +39,13 @@ export default function AthleteSubmit() {
   const [phase, setPhase] = useState("idle"); // idle | uploading | submitting | done
   const [error, setError] = useState("");
   const [submittedId, setSubmittedId] = useState(null);
+  const [source, setSource] = useState(undefined); // undefined = carregando, null = servidor fora do ar
   const fileInputRef = useRef(null);
 
   useEffect(() => subscribeModalities(setModalities), []);
   useEffect(() => subscribeClasses(setClasses), []);
   useEffect(() => { document.title = "Cadastrar atleta · JIFTv"; }, []);
+  useEffect(() => { getAthleteConfig().then((c) => setSource(c?.origem ?? null)); }, []);
 
   // Preview local (objectURL); revoga ao trocar/desmontar.
   useEffect(() => {
@@ -49,8 +58,13 @@ export default function AthleteSubmit() {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const age = computeAge(form.birthDate);
 
+  const byMatricula = source === "institucional";
+
   const localError = useMemo(() => {
-    if (!file) return "Escolha uma foto.";
+    if (source === undefined) return "Conectando ao servidor…";
+    if (source === null) return "O servidor do JIFTv está fora do ar. Tente de novo mais tarde.";
+    if (byMatricula && !MATRICULA.test(form.matricula.trim())) return "Informe a matrícula do aluno (só letras e números).";
+    if (!byMatricula && !file) return "Escolha uma foto.";
     if (form.name.trim().length < 2) return "Informe o nome completo.";
     if (!form.birthDate) return "Informe a data de nascimento.";
     if (age == null || age < 8 || age > 80) return "Data de nascimento fora da faixa aceita.";
@@ -59,7 +73,7 @@ export default function AthleteSubmit() {
     if (form.submittedByEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.submittedByEmail))
       return "E-mail de contato inválido.";
     return null;
-  }, [file, form, age]);
+  }, [file, form, age, source, byMatricula]);
 
   const onPickFile = (e) => {
     const f = e.target.files?.[0];
@@ -74,16 +88,19 @@ export default function AthleteSubmit() {
     if (localError) { setError(localError); return; }
     setError("");
     try {
-      setPhase("uploading");
-      setProgress(0);
-      const photoUrl = await uploadAthletePhoto(file, { onProgress: setProgress });
+      let photoUrl;
+      if (!byMatricula) {
+        setPhase("uploading");
+        setProgress(0);
+        photoUrl = await uploadAthletePhoto(file, { onProgress: setProgress });
+      }
 
       setPhase("submitting");
       const payload = {
         name: form.name.trim(),
         nickname: form.nickname.trim() || undefined,
         birthDate: form.birthDate,
-        photoUrl,
+        ...(byMatricula ? { matricula: form.matricula.trim() } : { photoUrl }),
         jerseyNumber: form.jerseyNumber ? Number(form.jerseyNumber) : undefined,
         position: form.position.trim() || undefined,
         bio: form.bio.trim() || undefined,
@@ -113,7 +130,7 @@ export default function AthleteSubmit() {
             Um administrador vai revisar e aprovar o perfil. Você não precisa fazer mais nada.
           </p>
           <p className="mt-4 text-xs text-muted">Protocolo: <code className="font-mono">{submittedId}</code></p>
-          <div className="mt-6 flex justify-center gap-2">
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Link to="/atletas" className="btn-ghost">Ver vitrine</Link>
             <button
               onClick={() => { setForm(INITIAL); setFile(null); setPreview(""); setPhase("idle"); setSubmittedId(null); }}
@@ -130,14 +147,14 @@ export default function AthleteSubmit() {
   const busy = phase !== "idle";
 
   return (
-    <section className="mx-auto max-w-3xl px-4 py-8 md:py-12">
-      <nav aria-label="Trilha de navegação" className="mb-4 text-xs text-muted">
+    <section className="mx-auto max-w-3xl px-4 pb-8 pt-2 md:py-12">
+      <nav aria-label="Trilha de navegação" className="crumbs">
         <Link to="/atletas" className="hover:text-fg">Atletas</Link>
         <span className="mx-2">/</span>
         <span className="text-fg">Novo cadastro</span>
       </nav>
 
-      <header className="mb-8">
+      <header className="mb-6 md:mb-8">
         <h1 className="text-3xl font-semibold md:text-4xl">Cadastrar atleta</h1>
         <p className="mt-2 max-w-2xl text-muted">
           Qualquer pessoa pode enviar. O perfil só aparece na vitrine depois de aprovado por um
@@ -145,35 +162,63 @@ export default function AthleteSubmit() {
         </p>
       </header>
 
-      <form onSubmit={submit} className="grid gap-6 rounded-3xl border border-line bg-surface p-6 md:p-8" noValidate>
+      <form onSubmit={submit} className="grid gap-6 rounded-3xl border border-line bg-surface p-4 sm:p-6 md:p-8" noValidate>
         <div className="grid gap-6 md:grid-cols-[200px_1fr]">
-          <PhotoPicker
-            preview={preview}
-            onPick={() => fileInputRef.current?.click()}
-            onClear={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-            file={file}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={onPickFile}
-            className="hidden"
-          />
+          {byMatricula ? (
+            <div>
+              <div className="grid aspect-square w-40 place-items-center rounded-2xl border border-dashed border-line bg-elevated text-muted md:w-full">
+                <GraduationCap size={34} />
+              </div>
+              <label className="mt-3 block text-sm font-medium text-fg">
+                Matrícula escolar *
+                <input
+                  value={form.matricula}
+                  onChange={set("matricula")}
+                  maxLength={20}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="next"
+                  required
+                  className="input mt-1 font-mono"
+                />
+              </label>
+              <p className="mt-2 text-xs text-muted">
+                A foto vem do cadastro da instituição, pela matrícula. Ela só aparece depois da aprovação.
+              </p>
+            </div>
+          ) : (
+            <>
+              <PhotoPicker
+                preview={preview}
+                onPick={() => fileInputRef.current?.click()}
+                onClear={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                file={file}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={onPickFile}
+                className="hidden"
+              />
+            </>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Nome completo *" full>
-              <input value={form.name} onChange={set("name")} maxLength={60} required className="input" />
+              <input value={form.name} onChange={set("name")} maxLength={60} required autoComplete="name" autoCapitalize="words" enterKeyHint="next" className="input" />
             </Field>
             <Field label="Apelido">
-              <input value={form.nickname} onChange={set("nickname")} maxLength={30} className="input" />
+              <input value={form.nickname} onChange={set("nickname")} maxLength={30} autoComplete="off" autoCapitalize="words" enterKeyHint="next" className="input" />
             </Field>
             <Field label="Data de nascimento *">
-              <input type="date" value={form.birthDate} onChange={set("birthDate")} required className="input" />
+              <input type="date" value={form.birthDate} onChange={set("birthDate")} required autoComplete="bday" className="input max-md:min-w-0 max-md:appearance-none max-md:text-left" />
               {age != null && <p className="mt-1 text-xs text-muted">{age} anos</p>}
             </Field>
             <Field label="Número">
-              <input type="number" min={0} max={999} value={form.jerseyNumber} onChange={set("jerseyNumber")} className="input" />
+              <input type="number" inputMode="numeric" pattern="[0-9]*" min={0} max={999} value={form.jerseyNumber} onChange={set("jerseyNumber")} autoComplete="off" enterKeyHint="next" className="input" />
             </Field>
             <Field label="Modalidade *">
               <select value={form.modalityCode} onChange={set("modalityCode")} required className="input">
@@ -194,7 +239,7 @@ export default function AthleteSubmit() {
               </select>
             </Field>
             <Field label="Posição" full>
-              <input value={form.position} onChange={set("position")} maxLength={40} placeholder="Ex.: Pivô, Ala, Goleira…" className="input" />
+              <input value={form.position} onChange={set("position")} maxLength={40} placeholder="Ex.: Pivô, Ala, Goleira…" autoComplete="off" autoCapitalize="sentences" enterKeyHint="next" className="input" />
             </Field>
           </div>
         </div>
@@ -214,10 +259,10 @@ export default function AthleteSubmit() {
         <fieldset className="grid gap-4 rounded-2xl border border-dashed border-line p-4 sm:grid-cols-2">
           <legend className="px-2 text-xs text-muted">Contato de quem enviou (opcional)</legend>
           <Field label="Seu nome">
-            <input value={form.submittedByName} onChange={set("submittedByName")} maxLength={60} className="input" />
+            <input value={form.submittedByName} onChange={set("submittedByName")} maxLength={60} autoComplete="name" autoCapitalize="words" enterKeyHint="next" className="input" />
           </Field>
           <Field label="Seu e-mail">
-            <input type="email" value={form.submittedByEmail} onChange={set("submittedByEmail")} maxLength={120} className="input" />
+            <input type="email" inputMode="email" value={form.submittedByEmail} onChange={set("submittedByEmail")} maxLength={120} autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="done" className="input" />
           </Field>
         </fieldset>
 
@@ -242,11 +287,11 @@ export default function AthleteSubmit() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="btn-ghost"
+            className="btn-ghost max-sm:justify-center"
             disabled={busy}
           >
             Cancelar
@@ -254,7 +299,7 @@ export default function AthleteSubmit() {
           <button
             type="submit"
             disabled={busy || !!localError}
-            className="btn-primary disabled:opacity-60"
+            className="btn-primary disabled:opacity-60 max-sm:justify-center"
           >
             {phase === "uploading" ? "Enviando foto…"
               : phase === "submitting" ? "Enviando cadastro…"
@@ -297,15 +342,15 @@ function PhotoPicker({ preview, onPick, onClear, file }) {
           </button>
         )}
       </div>
-      <div className="mt-2 flex justify-center gap-2 text-xs">
+      <div className="mt-2 flex items-center justify-center gap-2 text-xs max-md:text-sm">
         {preview ? (
           <>
-            <button type="button" onClick={onPick} className="text-accent hover:underline">Trocar</button>
+            <button type="button" onClick={onPick} className="text-accent hover:underline max-md:min-h-11 max-md:px-3">Trocar</button>
             <span className="text-muted">·</span>
-            <button type="button" onClick={onClear} className="text-live hover:underline">Remover</button>
+            <button type="button" onClick={onClear} className="text-live hover:underline max-md:min-h-11 max-md:px-3">Remover</button>
           </>
         ) : (
-          <span className="text-center text-muted">
+          <span className="text-center text-xs text-muted">
             JPG, PNG ou WebP até 2 MB. Foto quadrada fica melhor.
           </span>
         )}

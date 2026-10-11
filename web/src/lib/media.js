@@ -3,6 +3,7 @@
 //   HLS  -> {hlsBase}/{slug}.m3u8              (playlist mestre com todas as qualidades)
 //   DASH -> {dashBase}/{slug}/manifest.mpd     (todas as qualidades num manifesto)
 import { env } from "./env.js";
+import { cldAvatar } from "./cloudinary.js";
 
 const encodePath = (rel) => rel.split("/").map(encodeURIComponent).join("/");
 
@@ -36,9 +37,17 @@ export function vodThumb(vod, token) {
   return null;
 }
 
+// Foto do atleta: Cloudinary (photoUrl, com recorte no rosto) ou a pasta local do servidor
+// de mídia (photoPath), usada quando a foto vem do site institucional e o Cloudinary está desligado.
+export function athletePhoto(athlete, size = 400) {
+  if (athlete?.photoUrl) return cldAvatar(athlete.photoUrl, { size });
+  if (athlete?.photoPath) return `${env.mediaUrl}/${athlete.photoPath}`;
+  return null;
+}
+
 export function isPlayable(vod) {
   return Boolean(vod?.playbackUrl || (vod?.localFile && vod?.localAvailable !== false));
 }
 
-export const audienceUrl = () => `${env.mediaUrl}/api/audiencia`;
+export const audienceUrl = () => `${env.apiUrl}/api/audiencia`;
 export const timeUrl = () => `${env.mediaUrl}/time`;

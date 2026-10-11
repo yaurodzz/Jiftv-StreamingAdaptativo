@@ -90,14 +90,14 @@ export default function ScoutTypesEditor({ modality, onClose }) {
             const codeValid = CODE_RE.test(r.code);
             const dup = r.code && codes.indexOf(r.code) !== i;
             return (
-              <li key={i} className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_4rem_auto] gap-1.5">
+              <li key={i} className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_4rem_auto] gap-1.5 max-sm:grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)_3.75rem_auto]">
                 <input
                   value={r.code}
                   onChange={(e) => updateRow(i, { code: normalizeCode(e.target.value) })}
                   onBlur={(e) => updateRow(i, { code: normalizeCode(e.target.value) })}
                   placeholder="ponto"
                   className={
-                    "input font-mono text-xs " +
+                    "input font-mono text-xs max-md:text-base " +
                     (r.code && (!codeValid || dup) ? "!border-live" : "")
                   }
                   aria-label="Código"
@@ -106,7 +106,7 @@ export default function ScoutTypesEditor({ modality, onClose }) {
                   value={r.label}
                   onChange={(e) => updateRow(i, { label: e.target.value })}
                   placeholder="Ponto"
-                  className="input text-xs"
+                  className="input text-xs max-md:text-base"
                   aria-label="Rótulo"
                   maxLength={40}
                 />
@@ -115,12 +115,13 @@ export default function ScoutTypesEditor({ modality, onClose }) {
                   step="0.5"
                   value={r.weight}
                   onChange={(e) => updateRow(i, { weight: e.target.value })}
-                  className="input text-center text-xs"
+                  className="input text-center text-xs max-md:text-base"
+                  inputMode="decimal"
                   aria-label="Peso"
                 />
                 <button
                   onClick={() => removeRow(i)}
-                  className="rounded-md px-2 text-xs text-live hover:bg-live/10"
+                  className="rounded-md px-2 text-xs text-live hover:bg-live/10 max-md:min-w-11 max-md:text-lg"
                   aria-label="Remover linha"
                 >
                   ×

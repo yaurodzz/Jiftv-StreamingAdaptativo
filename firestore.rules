@@ -80,6 +80,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Dados privados do atleta (matrícula escolar e nome devolvido pelo site institucional).
+    // Ficam FORA de `athletes`, que é público depois de aprovado. Só o worker cria
+    // (cadastro por matrícula); o painel lê para conferir e apaga junto com o atleta.
+    match /athletePrivate/{id} {
+      allow read, delete: if isAdmin();
+      allow create, update: if false;
+    }
+
     // Eventos de scout: leitura pública (perfil do atleta agrega no navegador);
     // marcados pelo painel na tela de scout.
     match /scoutEvents/{id} {

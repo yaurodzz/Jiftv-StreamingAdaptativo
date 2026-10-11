@@ -99,15 +99,15 @@ export default function Catalog() {
   }, [all, modalities]);
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10">
-      <header className="mb-8">
+    <section className="mx-auto max-w-6xl px-4 py-6 md:py-10">
+      <header className="mb-6 md:mb-8">
         <h1 className="text-3xl font-semibold md:text-4xl">Catálogo de gravações</h1>
         <p className="mt-2 max-w-2xl text-muted">
           Todas as partidas dos Jogos IFSC, gravadas do início ao fim e organizadas por modalidade.
         </p>
       </header>
 
-      <div className="mb-8 flex flex-col gap-4">
+      <div className="mb-6 flex flex-col gap-4 md:mb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SearchBox value={q} onChange={setQ} />
           <ViewToggle value={view} onChange={setView} />

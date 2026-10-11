@@ -7,7 +7,7 @@ import { env } from "../lib/env.js";
 export async function submitAthlete(payload) {
   let res;
   try {
-    res = await fetch(`${env.mediaUrl}/api/atletas`, {
+    res = await fetch(`${env.apiUrl}/api/atletas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -24,6 +24,19 @@ export async function submitAthlete(payload) {
     throw new Error(msg);
   }
   return data; // { id, status: "pending" }
+}
+
+// Como a foto é obtida: "institucional" (pela matrícula, na API do site da instituição) ou
+// "upload" (a pessoa envia a foto ao Cloudinary). Quem decide é o worker (ATLETAS_PHOTO_SOURCE).
+// Retorna null se o servidor de mídia estiver fora do ar.
+export async function getAthleteConfig() {
+  try {
+    const res = await fetch(`${env.apiUrl}/api/atletas/config`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 function safeJson(text) {

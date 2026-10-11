@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../../lib/firebase.js";
 import { useAuth } from "../../providers/AuthProvider.jsx";
@@ -28,7 +28,7 @@ function ServerPill() {
     <NavLink
       to="/admin/sistema"
       className={
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium " +
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium max-md:min-h-11 " +
         (online ? "border-accent/40 text-fg" : "border-live/50 text-live")
       }
       title={online ? "Servidor de mídia conectado" : "Sem sinal do servidor de mídia"}
@@ -43,13 +43,40 @@ export default function AdminLayout() {
   const { user } = useAuth();
   const { streams } = useLiveStatus();
   const [pending, setPending] = useState(0);
+  const tabsRef = useRef(null);
+  const [moreTabs, setMoreTabs] = useState(false);
+  const { pathname } = useLocation();
+
+  // No celular as abas rolam na horizontal: a borda direita esmaece enquanto houver
+  // abas escondidas, e a aba ativa é trazida para a vista ao trocar de seção.
+  const updateTabs = useCallback(() => {
+    const el = tabsRef.current;
+    if (el) setMoreTabs(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return undefined;
+    updateTabs();
+    el.addEventListener("scroll", updateTabs, { passive: true });
+    const ro = new ResizeObserver(updateTabs);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateTabs);
+      ro.disconnect();
+    };
+  }, [updateTabs]);
+
+  useEffect(() => {
+    tabsRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
 
   // Contador em background para o selo de "Atletas" (cadastros aguardando aprovação).
   useEffect(() => subscribeAthletesAdmin({ status: "pending" }, (l) => setPending(l.length), () => setPending(0)), []);
 
   return (
     <ToastProvider>
-      <section className="mx-auto max-w-6xl px-4 py-8 md:py-10">
+      <section className="mx-auto max-w-6xl px-4 py-5 md:py-10">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-semibold">Painel</h1>
@@ -62,8 +89,12 @@ export default function AdminLayout() {
         </header>
 
         <nav
+          ref={tabsRef}
           aria-label="Seções do painel"
-          className="mb-6 flex gap-1 overflow-x-auto rounded-full border border-line bg-surface p-1 text-sm"
+          className={
+            "max-md:no-scrollbar mb-6 flex gap-1 overflow-x-auto rounded-full border border-line bg-surface p-1 text-sm " +
+            (moreTabs ? "max-md:[mask-image:linear-gradient(to_right,black_calc(100%-3rem),transparent)]" : "")
+          }
         >
           {TABS.map((t) => (
             <NavLink
@@ -71,7 +102,7 @@ export default function AdminLayout() {
               to={t.to}
               end={t.end}
               className={({ isActive }) =>
-                "relative inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-1.5 transition " +
+                "relative inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-1.5 transition max-md:min-h-11 " +
                 (isActive ? "bg-accent text-white" : "text-muted hover:text-fg")
               }
             >

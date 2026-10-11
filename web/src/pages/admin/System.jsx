@@ -95,6 +95,7 @@ export default function SystemPage() {
           <dl className="space-y-3 text-sm">
             <Field k="Servidor RTMP (OBS)" v={env.rtmpUrl} />
             <Field k="Servidor de mídia (vídeo)" v={env.mediaUrl} />
+            <Field k="Backend (worker)" v={env.apiUrl} />
             <Field k="HLS de uma transmissão" v={`${env.hlsBase}/<nome>.m3u8`} />
             <Field k="DASH de uma transmissão" v={`${env.dashBase}/<nome>/manifest.mpd`} />
           </dl>
@@ -152,6 +153,35 @@ export default function SystemPage() {
           </p>
         </section>
       </div>
+
+      <section className="card p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold">Site institucional (fotos dos atletas)</h2>
+          {server && (
+            <span className={"badge " + (server.institutional?.mode === "institucional" ? "bg-accent/10 text-accent" : "border border-line text-muted")}>
+              {server.institutional?.mode === "institucional" ? "Foto pela matrícula" : "Foto por upload"}
+            </span>
+          )}
+        </div>
+        {server?.institutional?.configured ? (
+          <dl className="space-y-1.5 text-sm">
+            <Row k="Servidor da API" v={<code className="font-mono text-xs">{server.institutional.host}</code>} />
+            <Row
+              k="Última consulta"
+              v={server.institutional.lastAt
+                ? `${formatRelative(server.institutional.lastAt)} · ${server.institutional.lastOk ? "ok" : "falhou"}`
+                : "nenhuma ainda"}
+            />
+            {server.institutional.lastError && <Row k="Erro" v={<span className="text-live">{server.institutional.lastError}</span>} />}
+          </dl>
+        ) : (
+          <p className="text-sm text-muted">
+            Não configurado: o cadastro de atleta pede o envio da foto. Para buscar a foto pela matrícula, defina
+            <code className="mx-1 font-mono">INSTITUCIONAL_API_URL</code> e o token no .env do servidor
+            (veja <code className="font-mono">docs/integracao-site-institucional.md</code>).
+          </p>
+        )}
+      </section>
 
       <section className="card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

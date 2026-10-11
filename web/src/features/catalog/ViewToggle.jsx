@@ -32,7 +32,7 @@ function Btn({ active, onClick, label, icon }) {
       aria-selected={active}
       onClick={onClick}
       className={
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors " +
+        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors max-md:min-h-11 max-md:px-4 " +
         (active ? "bg-elevated text-fg" : "text-muted hover:text-fg")
       }
     >

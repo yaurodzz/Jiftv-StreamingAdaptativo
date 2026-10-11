@@ -99,13 +99,13 @@ export default function StreamConfigCard({ stream }) {
             aria-checked={active}
             disabled={busy}
             onClick={toggleKey}
-            className={"relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 " + (active ? "bg-accent" : "bg-elevated border border-line")}
+            className={"relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 before:absolute before:-inset-2.5 md:before:hidden " + (active ? "bg-accent" : "bg-elevated border border-line")}
           >
             <span className={"absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform " + (active ? "translate-x-5" : "translate-x-0.5")} />
           </button>
           <span>{active ? "Chave ativa" : "Chave bloqueada"}</span>
         </label>
-        <button type="button" onClick={() => setConfirmRotate(true)} disabled={busy} className="text-sm text-accent hover:underline disabled:opacity-50">
+        <button type="button" onClick={() => setConfirmRotate(true)} disabled={busy} className="tap text-sm text-accent hover:underline disabled:opacity-50">
           Gerar nova chave
         </button>
       </div>

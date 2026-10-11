@@ -52,6 +52,8 @@ services:
     image: jiftv-emulators:latest
     container_name: jiftv-emulators
     restart: unless-stopped
+    # O emulador exporta os dados ao parar; com o padrão de 10 s o Docker mata o processo antes de terminar
+    stop_grace_period: 60s
     ports:
       - "4000:4000"   # interface dos emuladores
       - "4400:4400"
@@ -64,16 +66,33 @@ services:
       - ./firestore.indexes.json:/projeto/firestore.indexes.json:ro
       - jiftv-emuladores:/dados
 
-  # Túnel HTTPS da Cloudflare para publicar o servidor de mídia na internet
-  # (docker compose --profile tunel up). Precisa de CLOUDFLARE_TUNNEL_TOKEN no .env.
+  # Imita a API do site institucional (fotos pela matrícula) para desenvolvimento.
+  # No .env: INSTITUCIONAL_API_URL=http://institucional-mock:8090 e INSTITUCIONAL_API_TOKEN=mock-token
+  institucional-mock:
+    profiles: ["dev"]
+    image: python:3.12-slim
+    container_name: jiftv-institucional-mock
+    restart: unless-stopped
+    command: python /app/mock_institucional.py
+    volumes:
+      - ./tools/mock_institucional.py:/app/mock_institucional.py:ro
+    ports:
+      - "8090:8090"
+
+  # Túnel HTTPS da Cloudflare: publica o servidor em live.jiftv.org (vídeo) e api.jiftv.org (/api do worker)
+  # (docker compose --profile tunel up -d). Rotas em cloudflared/config.yml; credencial do túnel em
+  # secrets/cloudflared-tunel.json. Só faz conexões de saída: nenhuma porta precisa ser aberta no roteador.
   tunnel:
     profiles: ["tunel"]
     image: cloudflare/cloudflared:latest
     container_name: jiftv-tunnel
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - media
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./secrets/cloudflared-tunel.json:/etc/cloudflared/credenciais.json:ro
 
 volumes:
   jiftv-emuladores:

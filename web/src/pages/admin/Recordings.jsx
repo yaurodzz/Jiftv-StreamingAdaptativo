@@ -133,26 +133,26 @@ export default function Recordings() {
                     </p>
                   )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button type="button" className="icon-btn" title={v.visible ? "Ocultar do site" : "Mostrar no site"}
+                <div className="flex shrink-0 flex-wrap items-center gap-1">
+                  <button type="button" className="icon-btn" title={v.visible ? "Ocultar do site" : "Mostrar no site"} aria-label={v.visible ? "Ocultar do site" : "Mostrar no site"}
                           onClick={() => run(() => setVodVisible(v.id, !v.visible), v.visible ? "Gravação ocultada do site" : "Gravação visível no site")}>
                     {v.visible ? <Eye size={17} /> : <EyeOff size={17} />}
                   </button>
-                  <button type="button" className="icon-btn" title="Editar" onClick={() => setEditing(v)}><Pencil size={16} /></button>
-                  <Link className="icon-btn" to={`/scout/${v.id}`} title="Scout: marcar eventos dos atletas"><ClipboardList size={16} /></Link>
+                  <button type="button" className="icon-btn" title="Editar" aria-label="Editar" onClick={() => setEditing(v)}><Pencil size={16} /></button>
+                  <Link className="icon-btn" to={`/scout/${v.id}`} title="Scout: marcar eventos dos atletas" aria-label="Scout: marcar eventos dos atletas"><ClipboardList size={16} /></Link>
                   {cloudOn && local && status !== "uploading" && status !== "pending" && (
-                    <button type="button" className="icon-btn" title={status === "uploaded" ? "Enviar de novo ao Cloudinary" : "Enviar ao Cloudinary agora"}
+                    <button type="button" className="icon-btn" title={status === "uploaded" ? "Enviar de novo ao Cloudinary" : "Enviar ao Cloudinary agora"} aria-label={status === "uploaded" ? "Enviar de novo ao Cloudinary" : "Enviar ao Cloudinary agora"}
                             onClick={() => run(() => retryUpload(v.id), "Gravação colocada na fila do Cloudinary")}>
                       <CloudUpload size={17} />
                     </button>
                   )}
                   {v.cloudinary?.secureUrl && (
-                    <a className="icon-btn" href={v.cloudinary.secureUrl} target="_blank" rel="noopener noreferrer" title="Abrir no Cloudinary"><ExternalLink size={16} /></a>
+                    <a className="icon-btn" href={v.cloudinary.secureUrl} target="_blank" rel="noopener noreferrer" title="Abrir no Cloudinary" aria-label="Abrir no Cloudinary"><ExternalLink size={16} /></a>
                   )}
                   {local && (
-                    <a className="icon-btn" href={recordingUrl(v.localFile, v.visible ? null : token)} download title="Baixar"><Download size={16} /></a>
+                    <a className="icon-btn" href={recordingUrl(v.localFile, v.visible ? null : token)} download title="Baixar" aria-label="Baixar"><Download size={16} /></a>
                   )}
-                  <button type="button" className="icon-btn hover:text-live" title="Excluir" onClick={() => setDeleting(v)}><Trash2 size={16} /></button>
+                  <button type="button" className="icon-btn hover:text-live" title="Excluir" aria-label="Excluir" onClick={() => setDeleting(v)}><Trash2 size={16} /></button>
                 </div>
               </li>
             );
@@ -210,7 +210,7 @@ function EditVodDialog({ vod, onClose }) {
           <span className="label">Descrição</span>
           <textarea className="input min-h-[84px]" value={form.description} maxLength={4000} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         </label>
-        <label className="flex items-center gap-3 text-sm">
+        <label className="flex items-center gap-3 text-sm max-md:min-h-11">
           <input type="checkbox" checked={form.visible} onChange={(e) => setForm({ ...form, visible: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" />
           Visível no catálogo do site
         </label>
@@ -249,7 +249,7 @@ function DeleteVodDialog({ vod, mediaOnline, onClose }) {
         da pasta local e sai do catálogo. Esta ação não pode ser desfeita.
       </p>
       {onCloud && (
-        <label className="mt-4 flex items-center gap-3 text-sm">
+        <label className="mt-4 flex items-center gap-3 text-sm max-md:min-h-11">
           <input type="checkbox" checked={alsoCloud} onChange={(e) => setAlsoCloud(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--live))]" />
           Excluir também a cópia no Cloudinary
         </label>

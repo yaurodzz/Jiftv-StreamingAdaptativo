@@ -4,7 +4,7 @@ import { createPlayer } from "../../player/createPlayer.js";
 // Player de gravação (VOD). Usa o mesmo adapter unificado (hls.js/dash.js/nativo são
 // carregados sob demanda), mas sem overlay ao vivo nem menu de qualidade: o MP4 inteiro
 // tem uma qualidade só e o controle nativo do <video> é suficiente.
-export default function VodPlayer({ src, poster, onPlay }) {
+export default function VodPlayer({ src, poster, onPlay, className = "" }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export default function VodPlayer({ src, poster, onPlay }) {
   }, [src]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-black">
+    <div className={"overflow-hidden rounded-2xl border border-line bg-black " + className}>
       <video
         ref={videoRef}
         poster={poster || undefined}

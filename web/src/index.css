@@ -70,11 +70,11 @@
 
   .btn-primary {
     @apply inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium
-           text-white transition-transform hover:brightness-110 active:scale-[0.98];
+           text-white transition-transform hover:brightness-110 active:scale-[0.98] max-md:min-h-11;
   }
   .btn-ghost {
     @apply inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm
-           font-medium text-fg transition-colors hover:bg-elevated;
+           font-medium text-fg transition-colors hover:bg-elevated max-md:min-h-11;
   }
   .card {
     @apply overflow-hidden rounded-2xl border border-line bg-surface transition-colors
@@ -82,18 +82,18 @@
   }
   .input {
     @apply w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg
-           placeholder:text-muted focus:border-accent;
+           placeholder:text-muted focus:border-accent max-md:min-h-11 max-md:text-base;
   }
   .btn-danger {
     @apply inline-flex items-center gap-2 rounded-full border border-live/40 bg-live/10 px-5 py-2.5
-           text-sm font-medium text-live transition-colors hover:bg-live hover:text-white;
+           text-sm font-medium text-live transition-colors hover:bg-live hover:text-white max-md:min-h-11;
   }
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
   }
   .icon-btn {
     @apply inline-flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors
-           hover:bg-elevated hover:text-fg disabled:opacity-40;
+           hover:bg-elevated hover:text-fg disabled:opacity-40 max-md:h-11 max-md:w-11;
   }
   .label {
     @apply mb-1 block text-xs font-medium text-muted;
@@ -101,6 +101,37 @@
   .badge {
     @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
+
+  /* Link ou botão só de texto: no celular ganha 44px de altura de toque sem mudar o desenho. */
+  .tap {
+    @apply max-md:inline-flex max-md:min-h-11 max-md:items-center;
+  }
+
+  /* Trilha de navegação (Catálogo / Futsal): no celular cada link ganha área de toque de 44px. */
+  .crumbs {
+    @apply mb-4 text-xs text-muted max-md:mb-1 max-md:[&_a]:inline-block max-md:[&_a]:py-3.5;
+  }
+
+  /* Largura do player de gravação: cabe na altura da janela sem rolar. Em telas baixas
+     (celular deitado) o limite sumiria com o vídeo, então ali ele ocupa a largura toda. */
+  .player-fit {
+    max-width: 100%;
+  }
+  @media (min-height: 500px) {
+    .player-fit { max-width: min(100%, calc((100vh - 260px) * 16 / 9)); }
+  }
+}
+
+/* ------------------------------------------------------------------
+   Celular: área segura (notch e barra de gestos) e trilhas sem barra de rolagem.
+   Fora de aparelhos com recorte, env() vale 0 e nada muda.
+   ------------------------------------------------------------------ */
+@layer utilities {
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .px-safe { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
 }
 
 /* Transição de tema em círculo (View Transitions API) — ver ThemeProvider. */

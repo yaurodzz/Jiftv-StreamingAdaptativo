@@ -80,7 +80,7 @@ export default function StreamDetail() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link to="/admin/transmissoes" className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg">
+          <Link to="/admin/transmissoes" className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg max-md:min-h-11">
             <ArrowLeft size={13} /> Transmissões
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -175,7 +175,7 @@ export default function StreamDetail() {
           <section className="rounded-2xl border border-line bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold">Gravações <span className="text-sm font-normal text-muted">{recordings.length}</span></h3>
-              {recordings.length > 0 && <Link to="/admin/gravacoes" className="text-sm text-accent hover:underline">Gerenciar</Link>}
+              {recordings.length > 0 && <Link to="/admin/gravacoes" className="tap text-sm text-accent hover:underline">Gerenciar</Link>}
             </div>
             {recordings.length === 0 ? (
               <p className="text-sm text-muted">

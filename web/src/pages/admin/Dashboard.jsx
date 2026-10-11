@@ -69,7 +69,7 @@ export default function Dashboard() {
         <button type="button" onClick={() => setCreating(true)} className="btn-primary"><Plus size={16} /> Nova transmissão</button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatBlock value={live.length} label="Ao vivo agora" hint={`${listedLive.length} listada(s) no site`} tone={live.length ? "accent" : "default"} />
         <StatBlock value={viewers} label="Espectadores agora" hint={server?.media ? `Entrada ${formatMbps(server.media.bwIn)}` : null} />
         <StatBlock value={vods.length} label="Gravações" hint={server?.recordings ? `${formatBytes(server.recordings.bytes)} na pasta local` : null} />
@@ -109,7 +109,7 @@ export default function Dashboard() {
           <h3 className="flex items-center gap-2 font-semibold">
             {live.length > 0 && <span className="h-2 w-2 animate-live-pulse rounded-full bg-live" />} No ar agora
           </h3>
-          <Link to="/admin/transmissoes" className="text-sm text-accent hover:underline">Todas as transmissões</Link>
+          <Link to="/admin/transmissoes" className="tap text-sm text-accent hover:underline">Todas as transmissões</Link>
         </div>
         {live.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted">

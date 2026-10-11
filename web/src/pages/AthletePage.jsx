@@ -4,7 +4,7 @@ import { getAthlete, subscribeAthleteScout } from "../services/athletes.js";
 import { subscribeModalities } from "../services/modalities.js";
 import { subscribeVods } from "../services/vods.js";
 import { formatDate } from "../lib/format.js";
-import { cldAvatar } from "../lib/cloudinary.js";
+import { athletePhoto } from "../lib/media.js";
 import StatBlock from "../components/ui/StatBlock.jsx";
 import { computeAge, classLine, aggregateScout } from "../features/athletes/format.js";
 
@@ -81,19 +81,19 @@ export default function AthletePage() {
   const cls = classLine(athlete);
 
   return (
-    <section className="mx-auto max-w-5xl px-4 py-8 md:py-10">
-      <nav aria-label="Trilha de navegação" className="mb-4 text-xs text-muted">
+    <section className="mx-auto max-w-5xl px-4 pb-8 pt-2 md:py-10">
+      <nav aria-label="Trilha de navegação" className="crumbs">
         <Link to="/atletas" className="hover:text-fg">Atletas</Link>
         <span className="mx-2">/</span>
         <span className="text-fg">{athlete.modalityName || athlete.modality}</span>
       </nav>
 
-      <header className="grid gap-6 rounded-3xl border border-line bg-surface p-6 md:grid-cols-[220px_1fr] md:p-8">
+      <header className="grid gap-5 rounded-3xl border border-line bg-surface p-5 md:grid-cols-[220px_1fr] md:gap-6 md:p-8">
         <div className="mx-auto md:mx-0">
           <div className="relative aspect-square w-44 overflow-hidden rounded-2xl border border-line bg-elevated md:w-full">
-            {athlete.photoUrl && !photoBroken ? (
+            {athletePhoto(athlete, 512) && !photoBroken ? (
               <img
-                src={cldAvatar(athlete.photoUrl, { size: 512 })}
+                src={athletePhoto(athlete, 512)}
                 alt={`Foto de ${athlete.name}`}
                 width={512}
                 height={512}
@@ -106,7 +106,7 @@ export default function AthletePage() {
               </div>
             )}
             {athlete.jerseyNumber != null && (
-              <span className="absolute -bottom-3 -right-3 grid h-14 min-w-14 place-items-center rounded-full bg-accent px-2 text-xl font-bold text-white shadow-lg">
+              <span className="absolute -bottom-3 -right-3 max-md:bottom-2 max-md:right-2 grid h-14 min-w-14 place-items-center rounded-full bg-accent px-2 text-xl font-bold text-white shadow-lg">
                 {athlete.jerseyNumber}
               </span>
             )}
@@ -118,7 +118,7 @@ export default function AthletePage() {
             {athlete.modalityCode ? `${athlete.modalityCode} · ` : ""}
             {athlete.modalityName || athlete.modality}
           </p>
-          <h1 className="mt-1 text-3xl font-semibold md:text-4xl">{athlete.name}</h1>
+          <h1 className="mt-1 break-words text-3xl font-semibold md:text-4xl">{athlete.name}</h1>
           {athlete.nickname && (
             <p className="mt-1 text-lg text-muted">"{athlete.nickname}"</p>
           )}
@@ -140,7 +140,7 @@ export default function AthletePage() {
           Ainda não há eventos de scout registrados para este atleta.
         </p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
           {stats.map((s, i) => (
             <StatBlock
               key={s.code}
@@ -165,7 +165,7 @@ export default function AthletePage() {
                   </p>
                 </div>
                 {ev.matchType === "vod" && vodTitles.has(ev.matchId) && (
-                  <Link to={`/partidas/${ev.matchId}`} className="btn-ghost text-xs">
+                  <Link to={`/partidas/${ev.matchId}`} className="btn-ghost shrink-0 text-xs max-md:px-4">
                     Ver gravação
                   </Link>
                 )}

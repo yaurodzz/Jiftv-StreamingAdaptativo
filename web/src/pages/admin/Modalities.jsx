@@ -72,7 +72,7 @@ export default function Modalities() {
         <span className="text-xs text-muted">{list.length}</span>
       </div>
 
-      <form onSubmit={add} className="grid grid-cols-[1fr_96px_auto] gap-2">
+      <form onSubmit={add} className="grid grid-cols-[1fr_96px_auto] gap-2 max-sm:grid-cols-[1fr_96px] max-sm:[&>button]:col-span-2 max-sm:[&>button]:justify-center">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Futsal" className="input" aria-label="Nome da modalidade" />
         <input
           value={code}
@@ -101,17 +101,17 @@ export default function Modalities() {
             const scoutCount = Array.isArray(m.scoutTypes) ? m.scoutTypes.length : 0;
             return (
               <li key={m.id} className="rounded-xl border border-line px-3 py-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3">
                   <div className="flex items-center gap-3">
                     <code className="rounded-md bg-elevated px-2 py-0.5 font-mono text-xs text-fg">{m.code || "—"}</code>
                     <span className="text-sm">{m.name}</span>
                     {count > 0 && <span className="text-xs text-muted">· {count} {count === 1 ? "gravação" : "gravações"}</span>}
                   </div>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setExpanded(isOpen ? null : m.id)} className="text-xs text-muted hover:text-fg" aria-expanded={isOpen}>
+                    <button onClick={() => setExpanded(isOpen ? null : m.id)} className="tap text-xs text-muted hover:text-fg" aria-expanded={isOpen}>
                       Scout ({scoutCount}) {isOpen ? "▴" : "▾"}
                     </button>
-                    <button onClick={() => setConfirm({ modality: m, vodCount: count })} className="text-sm text-live hover:underline" aria-label={`Remover ${m.name}`}>
+                    <button onClick={() => setConfirm({ modality: m, vodCount: count })} className="tap text-sm text-live hover:underline" aria-label={`Remover ${m.name}`}>
                       Remover
                     </button>
                   </div>

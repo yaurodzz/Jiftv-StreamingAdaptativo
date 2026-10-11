@@ -11,7 +11,7 @@ export default function LiveIndicator({ compact = false }) {
   return (
     <Link
       to="/live"
-      className="group inline-flex items-center gap-2 rounded-full border border-line bg-surface/70 px-3 py-1.5 text-xs font-medium text-fg hover:border-live/60"
+      className="group inline-flex items-center gap-2 rounded-full border border-line bg-surface/70 px-3 py-1.5 text-xs font-medium text-fg hover:border-live/60 max-md:min-h-11"
     >
       <span className="relative flex h-2 w-2">
         <span className="absolute inline-flex h-full w-full animate-live-pulse rounded-full bg-live opacity-70" />

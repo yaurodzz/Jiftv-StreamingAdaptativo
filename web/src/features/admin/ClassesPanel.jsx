@@ -52,7 +52,7 @@ export default function ClassesPanel() {
         <span className="text-xs text-muted">{list.length}</span>
       </div>
 
-      <form onSubmit={add} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+      <form onSubmit={add} className="grid grid-cols-[1fr_1fr_auto] gap-2 max-sm:grid-cols-2 max-sm:[&>button]:col-span-2 max-sm:[&>button]:justify-center">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -91,7 +91,7 @@ export default function ClassesPanel() {
               </div>
               <button
                 onClick={() => setConfirm(c)}
-                className="text-sm text-live hover:underline"
+                className="tap text-sm text-live hover:underline"
                 aria-label={`Remover ${c.name}`}
               >
                 Remover

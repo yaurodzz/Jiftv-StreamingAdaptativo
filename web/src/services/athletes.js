@@ -1,5 +1,5 @@
 import {
-  collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
+  collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
 
@@ -78,7 +78,21 @@ export function updateAthlete(id, data) {
   });
 }
 
-// Remoção definitiva: só para spam ou duplicata.
-export function deleteAthlete(id) {
-  return deleteDoc(doc(db, "athletes", id));
+// Dados privados (matrícula escolar e nome devolvido pelo site institucional), só para o admin.
+// Mapa { idDoAtleta: { matricula, institutionalName, ... } }.
+export function subscribeAthletePrivate(cb, onError) {
+  return onSnapshot(
+    collection(db, "athletePrivate"),
+    (snap) => cb(Object.fromEntries(snap.docs.map((d) => [d.id, d.data()]))),
+    onError,
+  );
+}
+
+// Remoção definitiva: só para spam ou duplicata. Apaga também os dados privados.
+// (A foto guardada no servidor ou no Cloudinary não é apagada por aqui.)
+export async function deleteAthlete(id) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "athletes", id));
+  batch.delete(doc(db, "athletePrivate", id));
+  await batch.commit();
 }

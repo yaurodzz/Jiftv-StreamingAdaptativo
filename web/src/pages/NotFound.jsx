@@ -9,7 +9,7 @@ export default function NotFound() {
         <p className="mt-3 text-muted">
           O endereço que você seguiu não existe ou foi removido.
         </p>
-        <div className="mt-6 flex justify-center gap-3">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link to="/live" className="btn-primary">Ir para o ao vivo</Link>
           <Link to="/catalogo" className="btn-ghost">Ver gravações</Link>
         </div>

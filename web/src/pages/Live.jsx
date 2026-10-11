@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Eye, Link2, MapPin } from "lucide-react";
+import { Eye, Link2, MapPin, Share2 } from "lucide-react";
 import { useLiveStatus } from "../providers/LiveStatusProvider.jsx";
 import { subscribeStreamBySlug } from "../services/streams.js";
 import LivePlayer from "../features/live/LivePlayer.jsx";
@@ -12,6 +12,7 @@ import { useViewerPing } from "../features/live/useViewerPing.js";
 import { useClipboard } from "../features/admin/useClipboard.js";
 import MediaCard, { LiveBadge } from "../components/ui/MediaCard.jsx";
 import { liveThumb, liveUrl } from "../lib/media.js";
+import { useIsMobile } from "../lib/useIsMobile.js";
 
 const PROTOCOL_KEY = "jiftv-protocol";
 
@@ -29,6 +30,7 @@ export default function Live() {
   const [protocol, setProtocol] = useState(readProtocol);
   const [stats, setStats] = useState(null);
   const clip = useClipboard();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!slug) { setBySlug(undefined); return undefined; }
@@ -78,6 +80,7 @@ export default function Live() {
   const player = (
     <LivePlayer
       src={liveUrl(stream.slug, protocol)}
+      className="max-md:rounded-none max-md:border-x-0"
       cinema={cinema}
       onToggleCinema={() => setCinema((v) => !v)}
       onStats={setStats}
@@ -89,11 +92,11 @@ export default function Live() {
       <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm">
         <button
           onClick={() => setCinema(false)}
-          className="absolute right-4 top-4 z-20 rounded-full border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-medium text-white hover:bg-black/60"
+          className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-20 rounded-full border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-medium text-white hover:bg-black/60 max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-4"
         >
-          Sair do cinema (C)
+          Sair do cinema<span className="max-md:hidden"> (C)</span>
         </button>
-        <div className="mx-auto grid h-full max-w-[min(100vw,calc(100vh*16/9))] place-items-center px-4">
+        <div className="mx-auto grid h-full max-w-[min(100vw,calc(100vh*16/9))] place-items-center px-4 supports-[height:100dvh]:max-w-[min(100vw,calc(100dvh*16/9))] max-md:px-0">
           <div className="w-full">{player}</div>
         </div>
       </div>
@@ -101,14 +104,29 @@ export default function Live() {
   }
 
   const shareUrl = `${window.location.origin}/live/${stream.slug}`;
+  // No celular o botão abre a folha de compartilhamento do sistema (WhatsApp etc.);
+  // sem suporte, ou no desktop, copia o link.
+  const canShare = isMobile && typeof navigator.share === "function";
+  const share = () => {
+    if (!canShare) { clip.copy(shareUrl); return; }
+    navigator.share({ title: `${stream.title} · JIFTv`, url: shareUrl }).catch((err) => {
+      if (err?.name !== "AbortError") clip.copy(shareUrl);
+    });
+  };
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-6 md:py-8">
+    <section className="mx-auto max-w-7xl px-4 pb-6 md:py-8">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0">
-          {player}
+        <div className="min-w-0 max-md:flex max-md:flex-col">
+          {/* No celular o player encosta nas bordas da tela. */}
+          <div className="max-md:-mx-4">{player}</div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          {/* No celular o placar vem logo abaixo do player; de md para cima fica na lateral. */}
+          <div className="mt-3 empty:hidden md:hidden">
+            <Scoreboard stream={stream} size="lg" />
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 max-md:order-last max-md:mt-6">
             <div role="radiogroup" aria-label="Protocolo de streaming" className="inline-flex rounded-full border border-line bg-surface p-0.5 text-sm">
               {["hls", "dash"].map((p) => (
                 <button
@@ -117,13 +135,13 @@ export default function Live() {
                   role="radio"
                   aria-checked={protocol === p}
                   onClick={() => changeProtocol(p)}
-                  className={"rounded-full px-4 py-1.5 font-medium transition-colors " + (protocol === p ? "bg-accent text-white" : "text-muted hover:text-fg")}
+                  className={"rounded-full px-4 py-1.5 font-medium transition-colors max-md:min-h-11 max-md:px-5 " + (protocol === p ? "bg-accent text-white" : "text-muted hover:text-fg")}
                 >
                   {p.toUpperCase()}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-muted max-md:hidden">
               Atalhos: <kbd className="rounded border border-line px-1">C</kbd> cinema ·{" "}
               <kbd className="rounded border border-line px-1">F</kbd> tela cheia ·{" "}
               <kbd className="rounded border border-line px-1">M</kbd> mudo
@@ -133,7 +151,7 @@ export default function Live() {
           <header className="mt-5 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm text-accent">{stream.modalityName || stream.modality || "Transmissão ao vivo"}</p>
-              <h1 className="mt-1 text-2xl font-semibold md:text-3xl">{stream.title}</h1>
+              <h1 className="mt-1 break-words text-2xl font-semibold md:text-3xl">{stream.title}</h1>
               <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
                 <span className="inline-flex items-center gap-1.5 text-live">
                   <span className="h-2 w-2 animate-live-pulse rounded-full bg-live" /> Ao vivo
@@ -145,17 +163,19 @@ export default function Live() {
             </div>
             <button
               type="button"
-              onClick={() => clip.copy(shareUrl)}
-              className="btn-ghost"
+              onClick={share}
+              className="btn-ghost max-sm:w-full max-sm:justify-center"
             >
-              <Link2 size={15} /> {clip.copied ? "Link copiado" : "Copiar link"}
+              {canShare && !clip.copied
+                ? <><Share2 size={15} /> Compartilhar</>
+                : <><Link2 size={15} /> {clip.copied ? "Link copiado" : "Copiar link"}</>}
             </button>
           </header>
           {stream.description && <p className="mt-4 max-w-3xl whitespace-pre-line text-muted">{stream.description}</p>}
         </div>
 
         <aside className="space-y-4">
-          <Scoreboard stream={stream} size="lg" />
+          <div className="max-md:hidden"><Scoreboard stream={stream} size="lg" /></div>
           <StreamStats stats={stats} />
           {others.length > 0 && (
             <section>

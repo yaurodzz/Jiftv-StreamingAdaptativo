@@ -1,7 +1,7 @@
 # JIFTv: contexto técnico do projeto
 
 Documento para retomar o desenvolvimento em um chat novo sem perder contexto.
-Estado descrito: **2026-10-06**. Para o passo a passo de uso, veja também o [README.md](../README.md).
+Estado descrito: **2026-10-07** (inclui a integração com o site institucional e os subdomínios live/api.jiftv.org no túnel). Para o passo a passo de uso, veja também o [README.md](../README.md).
 
 > Dica para o novo chat: anexe este arquivo e o README, e diga qual item da seção
 > "Próximos passos" quer atacar.
@@ -34,6 +34,16 @@ rede escolar com banda limitada, servidor atrás do roteador da escola, interfac
 Escolhas do usuário: **Firebase para autenticação, banco de dados e hospedagem**; front-end baseado
 no projeto de referência `StreamingAdaptativo.zip` (React + Vite + Tailwind, "Tema IF").
 
+Decisões mais recentes do usuário:
+
+- **Fotos dos atletas vêm de uma API do site institucional** feito pelo professor, que já tem as fotos de todos
+  os alunos. O JIFTv consulta essa API pela **matrícula escolar** (o worker faz a chamada). O contrato real da
+  API ainda **não foi confirmado**: o JIFTv assume um formato configurável. Detalhes e perguntas para o
+  professor em [integracao-site-institucional.md](integracao-site-institucional.md).
+- **Servidores no domínio `jiftv.org`** (Cloudflare): site em `jiftv.org` (Firebase Hosting), streaming em
+  **`live.jiftv.org`** e backend (`/api/*` do worker) em **`api.jiftv.org`**, os dois pelo túnel `jiftv` da
+  Cloudflare, que já existia. Detalhes e pendências em [dominio-cloudflare.md](dominio-cloudflare.md).
+
 ---
 
 ## 2. Arquitetura
@@ -49,6 +59,7 @@ no projeto de referência `StreamingAdaptativo.zip` (React + Vite + Tailwind, "T
 │                exec_push  → transcode.sh (FFmpeg, 1 codificação,    │──HTTP/HTTPS──► espectadores
 │                             saídas via tee: HLS, DASH e miniatura)  │   (HLS/DASH/gravações/thumbs)
 │   HTTP :80  público: /hls /dash /thumbs /arquivos /api /time        │
+│             (live.jiftv.org; em api.jiftv.org só /api e /healthz)   │
 │   HTTP :8081 interno: /stat /control /internal                      │
 │ api    = worker Python (FastAPI + firebase-admin)                   │
 │   valida chave, marca ao vivo, registra gravações no Firestore,     │──saída──► Firestore / Auth
@@ -72,12 +83,18 @@ Ideias centrais (decisões tomadas e o porquê):
   `slug` público da transmissão no `on_publish` (resposta 302 com `Location: <slug>`). Por isso HLS,
   DASH e a pasta da gravação usam o slug, nunca a chave. Também é aceito `<slug>?key=<chave>`.
 - **Firebase Hosting é HTTPS** ⇒ o vídeo (HLS/DASH/gravações) também precisa chegar por HTTPS
-  (conteúdo misto é bloqueado). Previsto: túnel da Cloudflare (perfil `tunel` do compose).
-  RTMP não passa pelo túnel HTTP.
+  (conteúdo misto é bloqueado). Por isso o túnel da Cloudflare (perfil `tunel` do compose) publica o container
+  `media` em `live.jiftv.org` (vídeo) e `api.jiftv.org` (só `/api/*`). O backend entra pelo nginx do `media`, que
+  nunca expõe `/internal/*`. RTMP não passa pelo túnel HTTP (veja [dominio-cloudflare.md](dominio-cloudflare.md)).
+- **Foto do atleta pela matrícula**: o cadastro público manda a matrícula ao worker, que consulta a API do
+  site institucional (`api/app/institucional.py`), guarda uma cópia da foto (Cloudinary ou `gravacoes/fotos/`)
+  e grava a matrícula só em `athletePrivate/{id}` (admin). Sem `INSTITUCIONAL_API_URL`, volta ao upload.
 - **A pasta de vídeos é a fonte da verdade das gravações.** O worker sincroniza
   `gravacoes/videos/` → coleção `vods` (varredura de 60 s + aviso do script ao terminar).
 - **Cloudinary**: fila baseada no próprio Firestore (`vods.cloudinary.status`). O botão "Reenviar" só
   muda o status para `pending`. A cópia local **nunca** é apagada pelo envio.
+- **Túnel com configuração remota**: o túnel `jiftv` foi configurado pelo painel da Cloudflare, então as rotas do
+  painel substituem as de `cloudflared/config.yml` quando ele conecta. Mude rotas no painel (ou migre de volta).
 - **Desenvolvimento 100% local** com os emuladores do Firebase (projeto `demo-jiftv`), sem credenciais.
 
 ---
@@ -91,7 +108,8 @@ Ideias centrais (decisões tomadas e o porquê):
 | Banco/Auth/Hosting | Firebase: Firestore, Authentication, Hosting; emuladores via `firebase-tools@13` + OpenJDK 17 (container) |
 | Site | React 18, Vite 5, Tailwind 3 (`darkMode: 'class'`), react-router 6, `hls.js` 1.5, `dashjs` **4.7** (carregados por import dinâmico), `lucide-react`, Inter variável |
 | Infra | Docker Compose; serviços `media`, `api`, `emulators` (perfil `dev`), `tunnel` (perfil `tunel`) |
-| Mídia na nuvem | Cloudinary (vídeo das gravações; fotos de atletas com preset *unsigned*) |
+| Mídia na nuvem | Cloudinary (vídeo das gravações; fotos de atletas: cópia vinda do site institucional, ou upload com preset *unsigned*) |
+| Integrações | API do site institucional (fotos pela matrícula); domínio `jiftv.org` na Cloudflare (túnel `jiftv`: `live.` e `api.jiftv.org`) |
 
 Ambiente de desenvolvimento do usuário: Windows 11, Docker Desktop 28.5.1, Node 20.19, Python 3.13 local,
 `firebase-tools` 14 local, sem Java local (os emuladores rodam no container). Shells: Git Bash e PowerShell.
@@ -104,17 +122,25 @@ Pasta do projeto: `C:\Users\Pichau\OneDrive\Área de Trabalho\Jiftv-Streaming-Ad
 ```
 Jiftv-Streaming-Adaptativo/
 ├── README.md                    uso, produção, comandos
-├── docker-compose.yml           media, api, emulators (dev), tunnel (tunel)
+├── docker-compose.yml           media, api, emulators + institucional-mock (dev), tunnel (tunel)
+├── cloudflared/config.yml       rotas do túnel jiftv (live/api.jiftv.org → media:80); o painel da Cloudflare prevalece
 ├── .env / .env.example          configuração do servidor (nomes na seção 8)
 ├── firebase.json                Hosting (web/dist), Firestore, emuladores (portas)
 ├── .firebaserc                  default = jiftv-stream ; dev = demo-jiftv
 ├── firestore.rules              regras de segurança
 ├── firestore.indexes.json       índices compostos (vods, athletes, scoutEvents)
 ├── docs/
-│   ├── cloudinary-preset.md     preset unsigned das fotos de atletas
+│   ├── cloudinary-preset.md     preset unsigned das fotos de atletas (modo upload)
+│   ├── integracao-site-institucional.md   fotos pela matrícula: contrato assumido, segurança, perguntas,
+│   │                                      kit zip para o professor (JIFTv-API-Fotos-Professor.zip)
+│   ├── dominio-cloudflare.md    jiftv.org, túnel, RTMP, Firebase Hosting, CORS
+│   ├── mobile.md                adaptação do site para celular (abaixo de 768px): diagnóstico e mudanças
 │   └── CONTEXTO-DO-PROJETO.md   (este arquivo)
-├── secrets/                     .gitkeep ; aqui vai firebase-service-account.json (produção)
+├── tools/mock_institucional.py  API de mentira do site institucional (matrículas de teste)
+├── secrets/                     .gitkeep ; firebase-service-account.json (produção), cloudflared-tunel.json (túnel),
+│                                backups/ (cópia do Firestore antes da migração) e env-emuladores.bak (.env de dev)
 ├── gravacoes/                   montada em /recordings nos containers
+│   ├── fotos/                   fotos de atletas vindas do site institucional (sem Cloudinary); nginx /fotos/
 │   ├── em_andamento/            .flv em gravação
 │   ├── videos/<slug>/           <slug>_AAAA-MM-DD_HH-MM-SS.mp4 + .jpg + .info.json (+ .cloudinary.json)
 │   └── logs/                    jiftv.log, transcode.log, remux.log
@@ -142,12 +168,14 @@ Jiftv-Streaming-Adaptativo/
 │       ├── comandos.py          coleção commands: delete_vod, resync, logs
 │       ├── sistema.py           publica system/server a cada 20 s ; limpa events
 │       ├── routes.py            /internal/* (nginx) e /api/saude, /api/audiencia, /api/arquivo-auth
-│       ├── atletas.py           POST /api/atletas (cadastro público)
+│       ├── atletas.py           GET /api/atletas/config e POST /api/atletas (cadastro público: matrícula ou upload)
+│       ├── institucional.py     cliente da API do site institucional (foto pela matrícula; anti-SSRF)
 │       └── cli.py               python -m app.cli admin|remover-admin|listar
 ├── emulators/Dockerfile         Auth + Firestore locais (export em /dados/export)
 ├── web/                         site React
 │   ├── package.json, vite.config.js, tailwind.config.js, index.html
-│   ├── .env.example / .env.development (emuladores)   ← não existe web/.env (produção)
+│   ├── .env.example / .env.development (emuladores) / .env.production (live/api.jiftv.org, no git)
+│   │                            ← web/.env (fora do git): config Web do jiftv-stream (app "JIFTv Web")
 │   └── src/
 │       ├── App.jsx, main.jsx, index.css (tokens do Tema IF)
 │       ├── lib/        firebase, env, media (URLs HLS/DASH/arquivos), format, cloudinary, streamKey, uploadPhoto
@@ -173,9 +201,10 @@ Jiftv-Streaming-Adaptativo/
 | `streams` | painel + worker | painel: `title`, `slug`, modalidade (`modalityId/Code/Name`), `location`, `teamA/B`, `scoreA/B`, `scheduledFor`, `listed`, `keyActive`, `description`. Worker: `isLive`, `startedAt`, `endedAt`, `viewers`, `peakViewers`, `input{width,height,fps,bitrate,codecs}`, `qualitiesActive/Total`, `clientId`, `origin` |
 | `streamKeys/{streamId}` | painel | `streamKey` (20 chars Crockford base32). **Só admin lê** |
 | `vods` | worker + painel | ID `AAAAMMDD-COD-HHMMSS`. `title`, `modality*`, `recordedAt`, `durationSec`, `width/height`, `bytes`, `localFile`, `localThumb`, `localAvailable`, `visible`, `views`, `playbackUrl`/`thumbnailUrl` (Cloudinary), `cloudinary{status,error,attempts,nextAttemptAt,publicId,secureUrl}`, `sourceStreamId`, `streamSlug`, `teamA/B`, `scoreA/B` |
-| `athletes` | worker (cadastro) + painel | `name`, `nickname`, `birthDate`, `photoUrl`, `jerseyNumber`, `position`, `bio`, `modalityCode/Name`, `classId/Name/Campus`, `status` (`pending`/`approved`/`rejected`), `submittedAt/Ip/ByName/ByEmail`, `approvedAt/By`, `rejectedAt/By/Reason` |
+| `athletePrivate/{athleteId}` | worker | `matricula`, `modalityCode`, `institutionalName` (nome devolvido pela API), `photoSource`, `verifiedAt`. **Só admin lê/apaga** |
+| `athletes` | worker (cadastro) + painel | `name`, `nickname`, `birthDate`, `photoUrl` (Cloudinary) **ou** `photoPath` (`fotos/<id>.<ext>`, servido pelo media), `photoSource` (`institucional`/`upload`), `jerseyNumber`, `position`, `bio`, `modalityCode/Name`, `classId/Name/Campus`, `status` (`pending`/`approved`/`rejected`), `submittedAt/Ip/ByName/ByEmail`, `approvedAt/By`, `rejectedAt/By/Reason` |
 | `scoutEvents` | painel | `matchId` (id do vod), `matchType`, `athleteId/Name`, `modalityCode`, `type`, `value`, `videoTime`, `note`, `createdAt/By` |
-| `system/server` | worker | estado do servidor a cada 20 s: `lastSeen`, `media{...}`, `disk`, `recordings`, `cloudinary`, `qualities`, `viewers` |
+| `system/server` | worker | estado do servidor a cada 20 s: `lastSeen`, `media{...}`, `disk`, `recordings`, `cloudinary`, `institutional{configured,host,mode,lastAt,lastOk,lastError}`, `qualities`, `viewers` |
 | `events` | worker | histórico exibido no painel (`type`, `message`, `at`) |
 | `commands` | painel → worker | `type` (`delete_vod`/`resync`/`logs`), `payload`, `status` (`pending`/`running`/`done`/`error`), `result`/`error` |
 
@@ -186,6 +215,7 @@ Resumo das regras (`firestore.rules`, função `isAdmin()` = claim `admin == tru
 - `vods`: público lê só `visible == true` (a consulta precisa filtrar por `visible`); visitante pode somar
   exatamente +1 em `views`; criar/apagar só admin.
 - `athletes`: público lê só `approved`; escrita só admin (cadastro público passa pelo worker).
+- `athletePrivate`: só admin lê e apaga; ninguém cria/atualiza pelo cliente (só o worker, via Admin SDK).
 - `scoutEvents`: leitura pública; escrita só admin.
 - `commands`: admin cria (`status == 'pending'`, tipos permitidos); ninguém atualiza/apaga.
 - Todo o resto: fechado.
@@ -214,9 +244,13 @@ Gravações ocultas só abrem com `?token=<ID token de admin>` (nginx `auth_requ
 
 **Excluir gravação / ler logs / reverificar pasta**: painel cria documento em `commands`; worker executa.
 
-**Cadastro de atleta**: foto vai direto ao Cloudinary (preset unsigned `athletes_profile`) → dados vão para
-`POST /api/atletas` do worker (validação, 10 envios/min por IP, grava sempre `pending`) → admin aprova em
-Painel → Atletas → aparece na vitrine.
+**Cadastro de atleta**: o formulário pergunta ao worker como obter a foto (`GET /api/atletas/config`).
+Modo **institucional** (padrão com `INSTITUCIONAL_API_URL`): a pessoa informa a matrícula → `POST /api/atletas`
+→ o worker valida, consulta a API do site institucional, guarda a foto (Cloudinary, ou `gravacoes/fotos/`) e
+grava `athletes/{id}` (público após aprovar) + `athletePrivate/{id}` (matrícula) sempre como `pending`
+(limites: 10 envios/min e 5 matrículas inexistentes/10 min por IP; 409 se a matrícula já tem cadastro ativo
+na modalidade). Modo **upload**: foto direto ao Cloudinary (preset unsigned `athletes_profile`) e a URL vai no
+`POST`. Em ambos o admin aprova em Painel → Atletas → aparece na vitrine.
 
 **Scout**: Painel → Gravações → ícone de prancheta (`/scout/<vodId>`) → escolher atleta, tocar o vídeo e
 clicar no evento (grava `videoTime`). Tipos de evento por modalidade em Painel → Modalidades → Scout.
@@ -247,7 +281,14 @@ Tudo abaixo foi executado nos **emuladores locais** com um FFmpeg simulando o OB
   Gol 2 / Assistência 1.
 - Build de produção do site (`npm run build`) sem erros; layout mobile do painel antigo foi checado, o do
   site React ainda **não** foi revisado em 360 px.
-- Persistência dos dados dos emuladores entre reinícios (corrigido o erro `EBUSY` exportando em `/dados/export`).
+- Persistência dos dados dos emuladores entre reinícios (corrigido o erro `EBUSY` exportando em `/dados/export`;
+  `stop_grace_period: 60s` no compose, porque com 10 s o Docker matava o emulador antes de exportar).
+- **Foto pela matrícula (contra o mock)**: formato 1 (imagem direta) e formato 2 (JSON com URL); duplicada (409);
+  matrícula inválida/inexistente; cadastro sem foto (422); arquivo que não é imagem; foto em outro servidor e
+  redirecionamento para outro servidor (ambos barrados, nenhuma requisição saiu); token errado (aviso no painel);
+  limite de 5 matrículas inexistentes por IP; foto servida em `/fotos/<id>.png`; `athletePrivate` negado a
+  visitantes; formulário no modo matrícula pela interface; painel mostra a matrícula e "confere com o cadastro";
+  aprovar e ver na vitrine; card "Site institucional" em Painel → Sistema.
 
 Dados de teste que existem hoje nos emuladores (volume `jiftv-emuladores`): modalidade Futsal (FUT), turma
 3B-INFO, transmissões "Final do Futsal", "Legado Vôlei" e "Semifinal de Vôlei Feminino", atletas Ana Souza e
@@ -280,10 +321,16 @@ Portas: 1935 RTMP · 8080 mídia (HLS/DASH/arquivos/api) · 5173 site (dev) · 4
 Variáveis do `.env` da raiz (só os nomes): `FIREBASE_PROJECT_ID`, `FIRESTORE_EMULATOR_HOST`,
 `FIREBASE_AUTH_EMULATOR_HOST`, `CLOUDINARY_URL`, `CLOUDINARY_FOLDER`, `RETRY_INTERVAL_MIN`, `QUALIDADES`,
 `AUDIO_BITRATE`, `X264_PRESET`, `GRAVACOES_PUBLICAS`, `RTMP_PORT`, `HTTP_PORT`, `RECORDINGS_DIR`, `TZ`,
-`CLOUDFLARE_TUNNEL_TOKEN`, `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD`.
-Variáveis do site (`web/.env.example`): `VITE_FIREBASE_*`, `VITE_MEDIA_URL`, `VITE_RTMP_URL`,
+`DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD`, e (fotos pela matrícula / CORS)
+`INSTITUCIONAL_API_URL`, `INSTITUCIONAL_API_TOKEN`, `INSTITUCIONAL_API_HEADER`, `INSTITUCIONAL_API_PATH`,
+`INSTITUCIONAL_API_PHOTO_FIELDS`, `INSTITUCIONAL_API_NAME_FIELDS`, `INSTITUCIONAL_PHOTO_HOSTS`,
+`INSTITUCIONAL_API_TIMEOUT`, `ATLETAS_PHOTO_SOURCE`, `CORS_ORIGINS`. No `.env` de desenvolvimento, a API
+institucional aponta para o mock (`http://institucional-mock:8090`, token `mock-token`).
+Variáveis do site (`web/.env.example`): `VITE_FIREBASE_*`, `VITE_MEDIA_URL`, `VITE_API_URL` (vazio = `VITE_MEDIA_URL`), `VITE_RTMP_URL`,
 `VITE_CLOUDINARY_CLOUD_NAME`, `VITE_CLOUDINARY_UPLOAD_PRESET`; em dev vale `web/.env.development`
-(`VITE_FIREBASE_USE_EMULATORS=true`).
+(`VITE_FIREBASE_USE_EMULATORS=true`); no build vale `web/.env.production` (`VITE_MEDIA_URL=https://live.jiftv.org`,
+`VITE_API_URL=https://api.jiftv.org`), que tem prioridade sobre o `web/.env`. O túnel não usa variável
+(`CLOUDFLARE_TUNNEL_TOKEN` saiu): rotas em `cloudflared/config.yml`, credencial em `secrets/cloudflared-tunel.json`.
 
 ---
 
@@ -291,22 +338,55 @@ Variáveis do site (`web/.env.example`): `VITE_FIREBASE_*`, `VITE_MEDIA_URL`, `V
 
 Nada disto roda ainda em produção:
 
-1. **Projeto Firebase real**: nunca houve `firebase login`, `firebase deploy`, chave de conta de serviço
-   (`secrets/` está vazia) nem `web/.env` de produção. O `.firebaserc` aponta para `jiftv-stream` (mesmo
-   projeto do zip de referência); é preciso habilitar Authentication (e-mail/senha) e criar o Firestore.
+1. **Projeto Firebase real** (`jiftv-stream`, conta jiftv24@gmail.com no `firebase-tools`): em 2026-10-07 o usuário
+   fez o primeiro deploy do site novo; ele quebrou com `auth/invalid-api-key` (build sem `web/.env`). `web/.env` foi
+   criado com a config do app Web "JIFTv Web" e o build refeito; **falta redeploy** e conferir Authentication
+   (e-mail/senha), Firestore, *Authorized domains* (`jiftv.org`).
+   **2026-10-10: o worker roda no Firebase real.** Chave da conta de serviço em
+   `secrets/firebase-service-account.json` (`firebase-adminsdk-fbsvc@jiftv-stream`); `.env` com
+   `FIREBASE_PROJECT_ID=jiftv-stream` e os `*_EMULATOR_HOST` comentados (o `.env` dos emuladores ficou em
+   `secrets/env-emuladores.bak`); containers `emulators` e `institucional-mock` parados.
+   - Antes de ligar: backup do Firestore em `secrets/backups/firestore-jiftv-stream-2026-10-10-antes-da-migracao.json`
+     (havia 4 `modalities`, 3 `streams` com `streamKey` pública, 4 `vods` no Cloudinary; Auth com 1 usuário,
+     rdztrinta@gmail.com, já com claim `admin`).
+   - A migração automática rodou: `streamKey` saiu de `streams` e foi para `streamKeys` (3), `slug`/`keyActive`/
+     `listed` criados, 4 `vods` com `visible: true`. Conferido sem login: `streamKeys` responde 403 e a consulta
+     `vods where visible == true` devolve as 4 gravações, ou seja, as regras novas já estão publicadas.
+     A migração dispara uma vez por snapshot até o documento assentar (10 eventos para 3 transmissões, slug
+     regravado algumas vezes); inofensivo, mas `estado._migrar_stream` merece uma trava.
+   - Para nada de teste ir a público: `gravacoes/videos` e `gravacoes/fotos` de desenvolvimento foram **movidas**
+     para `gravacoes/_teste-emuladores/` (o nginx só serve `videos/` e `fotos/`), e `INSTITUCIONAL_API_*` (mock)
+     foi comentado no `.env`. Sem a API real nem Cloudinary, o cadastro público de atletas cai no modo upload e
+     **não funciona** até um dos dois ser configurado.
+   - `/api/saude` responde por `http://localhost:8080` e por `https://api.jiftv.org`.
+   - **Falta o redeploy do site**: `jiftv.org` ainda serve o build quebrado de 07/10 (`index-CENO5X3X.js`, sem a
+     config do Firebase). O `firebase-tools` desta máquina voltou a estar logado em **yaurodzz@gmail.com**, sem
+     acesso ao `jiftv-stream`: `firebase login --reauth` com jiftv24@gmail.com e depois
+     `firebase deploy --only hosting,firestore`. Conferir também *Authorized domains* (`jiftv.org`).
 2. **Cloudinary com credenciais reais**: `cloud.py` (fila via Firestore) **nunca foi executado**, pois
    `CLOUDINARY_URL` está vazio. (O caminho de falha do script antigo foi validado com credenciais falsas, mas
-   foi substituído.) O preset `athletes_profile` também nunca foi criado/testado; a tela de cadastro para no
-   envio da foto com "Cloudinary não configurado".
+   foi substituído.) O envio da foto de atleta ao Cloudinary (`atletas.py`, modo matrícula) também nunca rodou:
+   sem Cloudinary a foto vai para `gravacoes/fotos/`. O preset `athletes_profile` (modo upload) nunca foi criado.
+   2b. **API real do site institucional**: o contrato não foi confirmado com o professor; tudo foi testado só
+   contra `tools/mock_institucional.py`. É preciso URL, autenticação, endpoint, formato da resposta e autorização
+   LGPD (perguntas em [integracao-site-institucional.md](integracao-site-institucional.md)). Em 2026-10-10 foi
+   montado o kit `JIFTv-API-Fotos-Professor.zip` (contrato, OpenAPI, verificador `testar_api.py`, prompt para o
+   Claude do professor e questionário); falta enviá-lo e receber as respostas.
+   2c. **Subdomínios do jiftv.org**: `live.jiftv.org` (streaming) e `api.jiftv.org` (backend) são do túnel `jiftv`.
+   **Funcionando pela internet desde 2026-10-07**: rotas no painel da Cloudflare trocadas para `http://media:80`
+   (o painel prevalece sobre `cloudflared/config.yml`); `/healthz`, `/api/saude` e o bloqueio de `/internal` testados.
+   Falta testar uma transmissão e uma gravação pelo domínio. `jiftv.org` já está no
+   Firebase Hosting com o site **antigo**, num projeto fora da conta logada no `firebase-tools` desta máquina.
 3. **OBS real, DroidCam, Larix** e rede escolar real: só houve simulação com FFmpeg.
-4. **HTTPS do vídeo / túnel da Cloudflare** e encaminhamento da porta 1935: não configurados.
+4. **HTTPS do vídeo / túnel da Cloudflare**: funcionando (item 2c), sem transmissão real testada. Encaminhamento
+   da porta 1935 (OBS de fora da escola): não configurado.
 5. **Autoplay do player** quando a aba está em segundo plano: o navegador pausa vídeo mudo em aba escondida;
    foi adicionado retomar em `visibilitychange`, mas não foi observado funcionando (o painel de teste estava
    oculto). Testar em aba visível.
 6. **Responsivo do site React** (360–1920 px, TV), acessibilidade e lint: não revisados; não há ESLint nem
    testes automatizados no `web/` (o `claude.md` do zip citava `npm run lint`, que o `package.json` de
    referência também não tinha).
-7. Docker Desktop estava **parado** na última verificação; os containers não estão rodando agora.
+7. O Docker Desktop precisa estar aberto para rodar os containers (nesta sessão foi iniciado para os testes).
 
 ---
 
@@ -314,21 +394,31 @@ Nada disto roda ainda em produção:
 
 - **Dados pessoais públicos (LGPD, menores de idade)**: a regra `athletes` libera o documento inteiro de quem
   está `approved`, incluindo `submittedIp`, `submittedByEmail`, `submittedByName` e `birthDate` completa
-  (herdado do projeto de referência). Sugestão: mover os campos privados para outro documento/coleção só admin
-  e mostrar só a idade; incluir aviso/consentimento no formulário.
+  (herdado do projeto de referência). **A matrícula já foi tirada daí** (vai para `athletePrivate`); falta
+  fazer o mesmo com esses campos e mostrar só a idade; incluir aviso/consentimento no formulário. A foto de
+  aluno no site público exige autorização da instituição.
+- **Enumeração de matrículas**: "matrícula não encontrada" revela, devagar (5 erros/10 min por IP), quais
+  matrículas existem. Alternativa: restringir o cadastro a quem está logado ou mover para o painel.
+- Fotos de atletas excluídos no painel **não** são apagadas do Cloudinary nem de `gravacoes/fotos/`; a foto
+  de atleta pendente/rejeitado fica acessível a quem souber a URL (nome = id aleatório do atleta).
 - **IP do OBS público**: o worker grava `origin` (endereço do OBS) e `clientId` em `streams`, que é de leitura
   pública. Mover para um documento só admin (ex.: `streamKeys/{id}` ou `system`).
 - Contagem de espectadores (`POST /api/audiencia`) e `views` (+1 por visitante) não têm proteção contra
-  abuso; CORS do worker é `*`; o limite do cadastro confia em `X-Real-IP`/`CF-Connecting-IP`, falsificáveis se
-  alguém alcançar o servidor sem passar pelo túnel.
+  abuso. O CORS do worker agora é restrito (`CORS_ORIGINS`: jiftv.org, www, domínios do Firebase, localhost;
+  `*` só nos emuladores), mas o limite do cadastro confia em `CF-Connecting-IP`/`X-Real-IP`, falsificáveis se
+  alguém alcançar o servidor sem passar pelo túnel (mantenha a porta 8080 fechada para fora da rede local).
 - `commands` e `events` crescem; `events` é podado (~hora em hora), `commands` não.
 - Foto aprovada do atleta continua na pasta `pending` do Cloudinary (mover para `approved` não foi implementado,
   também não estava no projeto de referência).
 - Scout só para gravações (não ao vivo). Se o container `media` cair no meio da transmissão, o `.flv` parcial é
   recuperado na inicialização; se o OBS reconectar, o jogo vira dois vídeos.
-- Disco da máquina de desenvolvimento em **~99%** (≈6 GB livres de 476 GB). Cada hora em 1080p a 6 Mbps ≈ 2,7 GB.
+- Disco da máquina de desenvolvimento **quase cheio** (2026-10-07: chegou a 0 bytes livres e o build falhou com
+  `ENOSPC`; apagar o cache do npm liberou ≈5,7 GB) (2,1 GB livres de 476 GB em 2026-10-07; eram ≈6 GB no
+  dia anterior). Cada hora em 1080p a 6 Mbps ≈ 2,7 GB.
 - O projeto está dentro do **OneDrive**: `gravacoes/` sincroniza arquivos grandes (considere `RECORDINGS_DIR`
-  em outro disco). **Não é repositório git** (sem versionamento): `git init` é recomendável.
+  em outro disco). O projeto **é um repositório git** (branch `master`, 1º commit `56fa730`, sem remoto; o push
+  para `github.com/yaurodzz/...` falhou porque o repositório ainda não foi criado). As mudanças desta
+  atualização (integração institucional, domínio, CORS) **ainda não foram commitadas**.
 - O `.env` foi sobrescrito uma vez sem leitura prévia (os containers ainda estavam com os valores padrão, então
   não se perdeu configuração conhecida).
 - Resquícios no Docker: volume `jiftv-streaming-adaptativo_jiftv-dados` (SQLite da versão antiga, sem uso) e
@@ -342,23 +432,30 @@ Nada disto roda ainda em produção:
 
 ## 11. Próximos passos sugeridos (ordem de prioridade)
 
-1. **Ir para o Firebase real**: habilitar Auth e Firestore em `jiftv-stream`; baixar a chave de conta de serviço
-   para `secrets/firebase-service-account.json`; ajustar `.env` (remover `*_EMULATOR_HOST`, `FIREBASE_PROJECT_ID`);
-   `web/.env` com a config Web; `docker compose up -d`; criar o admin real
-   (`python -m app.cli admin <email>`); `firebase deploy --only hosting,firestore`.
-2. **Publicar o vídeo por HTTPS** (túnel Cloudflare ou domínio) e apontar `VITE_MEDIA_URL`; liberar a porta 1935
-   no roteador para o OBS externo.
+1. **Terminar a ida para o Firebase real** (worker já ligado em 2026-10-10, item 9.1): falta só
+   `firebase login --reauth` (jiftv24@gmail.com) + `firebase deploy --only hosting,firestore` e testar o login do
+   painel em `jiftv.org` (admin: rdztrinta@gmail.com).
+2. **Terminar o domínio** ([dominio-cloudflare.md](dominio-cloudflare.md)): testar uma transmissão e uma gravação
+   por `https://live.jiftv.org`; desativar o serviço do Windows `cloudflared`; deploy com a conta dona do projeto
+   Firebase (substitui o site antigo em `jiftv.org`); decidir como o OBS chega de fora (`rtmp.jiftv.org` sem proxy +
+   porta 1935, ou só rede da escola).
+2b. **Confirmar a API do site institucional com o professor** (URL, autenticação, endpoint, formato, LGPD:
+   lista em [integracao-site-institucional.md](integracao-site-institucional.md)), ajustar o `.env` (e, se o
+   contrato for diferente, `api/app/institucional.py`) e testar com matrículas reais.
 3. **Corrigir os vazamentos de privacidade** da seção 10 (campos privados de `athletes`, `origin` de `streams`).
 4. **Testar Cloudinary de verdade**: `CLOUDINARY_URL`, um MP4 pequeno e um grande (limite de plano), falha e
-   nova tentativa, "Reenviar"; criar o preset `athletes_profile` e testar o cadastro com foto real.
+   nova tentativa, "Reenviar"; foto de atleta indo para `athletes/pending` (modo matrícula). O preset
+   `athletes_profile` só é necessário se o cadastro ficar no modo upload.
 5. **Teste de campo**: OBS/DroidCam reais, variar a banda (throttling) para ver a troca de qualidade, medir
    latência e CPU do FFmpeg com 4 qualidades (e avaliar 2160p, citado no artigo).
 6. Revisar **responsivo/TV/acessibilidade**, adicionar ESLint e alguns testes (regras do Firestore com o
    emulador; helpers de `lib/`; endpoints do worker).
-7. `git init`, definir `RECORDINGS_DIR` fora do OneDrive, limpar volumes antigos do Docker, política de
-   retenção/limpeza das gravações locais e monitoramento de disco (alerta).
+7. Commitar as mudanças pendentes; criar o repositório no GitHub e dar `push`; definir `RECORDINGS_DIR` fora
+   do OneDrive, **liberar espaço em disco**, limpar volumes antigos do Docker, política de retenção/limpeza das
+   gravações locais e monitoramento de disco (alerta).
 8. Ideias de evolução (do artigo e da conversa): scout ao vivo, mover foto aprovada para a pasta `approved`,
-   estatísticas por partida/atleta, métricas de desempenho do streaming para o artigo.
+   estatísticas por partida/atleta, métricas de desempenho do streaming para o artigo; da integração
+   institucional: pré-preencher nome/turma pela API, cadastro em lote por lista de matrículas, "Atualizar foto".
 
 ---
 
@@ -375,3 +472,9 @@ Nada disto roda ainda em produção:
 - O cache em memória do worker (`estado.py`) pode estar defasado logo após uma escrita; por isso `recordings.py` e
   `cloud.py` guardam o que acabaram de processar (`_recentes`, `_processadas`) para não duplicar trabalho.
 - Painel de pré-visualização oculto pausa vídeo e atrasa screenshots; teste de player só vale em aba visível.
+- O nginx do `media` **sobrescreve** `X-Real-IP` com o IP da conexão; em testes, simule IPs com o cabeçalho
+  `CF-Connecting-IP` (é o que o Cloudflare envia, e o worker o prefere).
+- Ao recriar o container dos emuladores (`up --build`), o Docker espera só 10 s por padrão e pode matar o emulador
+  antes de exportar os dados; por isso `stop_grace_period: 60s`. Dados de teste podem sumir se isso falhar.
+- `docker compose` lê o `.env` da raiz: mudar uma variável exige `docker compose up -d <serviço>` (recria o container).
+- Matrículas de teste e o mock: `tools/mock_institucional.py` (docstring lista os casos).

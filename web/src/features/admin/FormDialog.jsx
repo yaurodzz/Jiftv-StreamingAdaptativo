@@ -34,22 +34,22 @@ export default function FormDialog({
       {open && (
         <form
           onSubmit={(e) => { e.preventDefault(); onSubmit?.(); }}
-          className="flex max-h-[calc(100vh-4rem)] flex-col"
+          className="flex max-h-[calc(100vh-4rem)] flex-col supports-[height:100dvh]:max-h-[calc(100dvh-4rem)]"
         >
-          <header className="flex items-center justify-between gap-3 px-6 pt-5">
+          <header className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-5">
             <h2 className="text-lg font-semibold">{title}</h2>
             <button type="button" onClick={onClose} className="icon-btn" aria-label="Fechar">
               <X size={16} />
             </button>
           </header>
-          <div className="overflow-y-auto px-6 py-4">{children}</div>
-          <footer className="flex justify-end gap-2 border-t border-line px-6 py-4">
+          <div className="overflow-y-auto px-4 py-4 sm:px-6">{children}</div>
+          <footer className="flex justify-end gap-2 border-t border-line px-4 py-4 sm:px-6 max-sm:[&>*]:flex-1 max-sm:[&>*]:justify-center">
             <button type="button" onClick={onClose} className="btn-ghost">Cancelar</button>
             <button
               type="submit"
               disabled={submitting || submitDisabled}
               className={(danger
-                ? "inline-flex items-center gap-2 rounded-full bg-live px-5 py-2.5 text-sm font-medium text-white hover:brightness-110"
+                ? "inline-flex items-center gap-2 rounded-full bg-live px-5 py-2.5 text-sm font-medium text-white hover:brightness-110 max-md:min-h-11"
                 : "btn-primary") + " disabled:opacity-60"}
             >
               {submitting && !danger ? "Salvando…" : submitLabel}

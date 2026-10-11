@@ -84,7 +84,7 @@ export default function Row({ title, count, children, action }) {
           onKeyDown={onKeyDown}
           role="list"
           aria-label={title}
-          className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-md:-mx-4 max-md:scroll-px-4 max-md:px-4"
         >
           {children}
         </div>

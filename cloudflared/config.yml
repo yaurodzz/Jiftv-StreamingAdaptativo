@@ -1,0 +1,16 @@
+# Túnel da Cloudflare do JIFTv (container "tunnel", docker compose --profile tunel up -d).
+# Túnel "jiftv" gerenciado localmente: o id abaixo aparece no DNS (CNAME <id>.cfargotunnel.com) e não é segredo.
+# A credencial do túnel fica em secrets/cloudflared-tunel.json (fora do git). Detalhes: docs/dominio-cloudflare.md
+tunnel: 71a6d3dd-a49c-4bf9-a18d-93af41e7948b
+credentials-file: /etc/cloudflared/credenciais.json
+no-autoupdate: true
+
+ingress:
+  # Streaming: HLS, DASH, miniaturas, fotos e gravações (e também /api, por compatibilidade)
+  - hostname: live.jiftv.org
+    service: http://media:80
+  # Backend: só /api/* do worker. O nginx do "media" recusa o resto neste nome
+  # e nunca expõe os ganchos /internal (porta 8081, só na rede do Docker).
+  - hostname: api.jiftv.org
+    service: http://media:80
+  - service: http_status:404

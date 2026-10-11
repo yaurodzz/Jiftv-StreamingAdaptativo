@@ -22,6 +22,8 @@ export default function ThemeToggle({ className = "" }) {
       className={
         "relative inline-flex h-8 w-14 items-center rounded-full border border-line " +
         "bg-elevated transition-colors " +
+        // Área de toque de 44px no celular sem mudar o desenho do switch.
+        "before:absolute before:-inset-y-1.5 before:inset-x-0 md:before:hidden " +
         className
       }
     >

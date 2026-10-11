@@ -32,7 +32,7 @@ export default function ConfirmDialog({
 
   const confirmClass =
     tone === "danger"
-      ? "inline-flex items-center gap-2 rounded-full bg-live px-5 py-2.5 text-sm font-medium text-white transition-transform hover:brightness-110 active:scale-[0.98]"
+      ? "inline-flex items-center gap-2 rounded-full bg-live px-5 py-2.5 text-sm font-medium text-white transition-transform hover:brightness-110 active:scale-[0.98] max-md:min-h-11"
       : "btn-primary";
 
   return (
@@ -47,7 +47,7 @@ export default function ConfirmDialog({
           ? <p className="mt-2 text-sm text-muted">{description}</p>
           : <div className="mt-2 text-sm text-muted">{description}</div>
       )}
-      <div className="mt-6 flex justify-end gap-2">
+      <div className="mt-6 flex flex-wrap justify-end gap-2 max-sm:[&>*]:flex-1 max-sm:[&>*]:justify-center">
         <button type="button" onClick={onCancel} className="btn-ghost">{cancelLabel}</button>
         <button type="button" onClick={onConfirm} className={confirmClass}>{confirmLabel}</button>
       </div>

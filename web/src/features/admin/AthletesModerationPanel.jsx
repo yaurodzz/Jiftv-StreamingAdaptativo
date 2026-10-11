@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { approveAthlete, deleteAthlete, rejectAthlete, subscribeAthletesAdmin, updateAthlete } from "../../services/athletes.js";
-import { cldAvatar } from "../../lib/cloudinary.js";
+import {
+  approveAthlete, deleteAthlete, rejectAthlete, subscribeAthletePrivate, subscribeAthletesAdmin, updateAthlete,
+} from "../../services/athletes.js";
+import { athletePhoto } from "../../lib/media.js";
 import { computeAge, classLine } from "../athletes/format.js";
 import FormDialog from "./FormDialog.jsx";
 import { useToast } from "./ToastProvider.jsx";
@@ -24,6 +26,9 @@ export default function AthletesModerationPanel({ onPendingCount }) {
   const [reject, setReject] = useState(null); // { athlete, reason }
   const [remove, setRemove] = useState(null); // athlete
   const [editing, setEditing] = useState(null); // athlete
+  const [priv, setPriv] = useState({}); // { idDoAtleta: { matricula, institutionalName } } (só admin lê)
+
+  useEffect(() => subscribeAthletePrivate(setPriv, () => setPriv({})), []);
 
   // Contagem de pendentes fica sempre atualizada, mesmo quando a aba ativa é outra.
   useEffect(() => subscribeAthletesAdmin({ status: "pending" }, (l) => onPendingCount?.(l.length)), [onPendingCount]);
@@ -70,7 +75,7 @@ export default function AthletesModerationPanel({ onPendingCount }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Atletas</h2>
-        <div role="tablist" aria-label="Filtro por status" className="flex gap-1 rounded-full border border-line bg-surface p-1 text-sm">
+        <div role="tablist" aria-label="Filtro por status" className="max-md:no-scrollbar flex max-w-full gap-1 overflow-x-auto rounded-full border border-line bg-surface p-1 text-sm">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -78,7 +83,7 @@ export default function AthletesModerationPanel({ onPendingCount }) {
               aria-selected={tab === t.key}
               onClick={() => setTab(t.key)}
               className={
-                "rounded-full px-3 py-1 " +
+                "shrink-0 rounded-full px-3 py-1 max-md:min-h-11 max-md:px-4 " +
                 (tab === t.key ? "bg-accent text-white" : "text-muted hover:text-fg")
               }
             >
@@ -98,6 +103,7 @@ export default function AthletesModerationPanel({ onPendingCount }) {
             <AthleteRow
               key={a.id}
               athlete={a}
+              priv={priv[a.id]}
               tab={tab}
               onApprove={() => approve(a)}
               onReject={() => setReject({ athlete: a, reason: "" })}
@@ -207,7 +213,9 @@ function EditAthleteDialog({ athlete, onClose }) {
   );
 }
 
-function AthleteRow({ athlete, tab, onApprove, onReject, onRemove, onEdit }) {
+const norm = (s) => (s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+function AthleteRow({ athlete, priv, tab, onApprove, onReject, onRemove, onEdit }) {
   const age = computeAge(athlete.birthDate);
   const cls = classLine(athlete);
   const submittedWhen = athlete.submittedAt?.toDate
@@ -217,9 +225,9 @@ function AthleteRow({ athlete, tab, onApprove, onReject, onRemove, onEdit }) {
   return (
     <li className="flex gap-3 rounded-2xl border border-line bg-surface p-3">
       <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-elevated">
-        {athlete.photoUrl ? (
+        {athletePhoto(athlete, 200) ? (
           <img
-            src={cldAvatar(athlete.photoUrl, { size: 200 })}
+            src={athletePhoto(athlete, 200)}
             alt=""
             width={200}
             height={200}
@@ -249,6 +257,16 @@ function AthleteRow({ athlete, tab, onApprove, onReject, onRemove, onEdit }) {
           {age != null && ` · ${age} anos`}
         </p>
         {athlete.position && <p className="text-xs text-muted">{athlete.position}</p>}
+        {priv?.matricula && (
+          <p className="mt-1 text-[11px] text-muted">
+            Matrícula <code className="font-mono text-fg">{priv.matricula}</code>
+            {priv.institutionalName && (
+              norm(priv.institutionalName) === norm(athlete.name)
+                ? <> · confere com o cadastro da instituição</>
+                : <span className="text-warn"> · nome no cadastro da instituição: {priv.institutionalName}</span>
+            )}
+          </p>
+        )}
 
         {tab === "pending" && submittedWhen && (
           <p className="mt-1 text-[11px] text-muted">Enviado em {submittedWhen}</p>
@@ -257,7 +275,7 @@ function AthleteRow({ athlete, tab, onApprove, onReject, onRemove, onEdit }) {
           <p className="mt-1 line-clamp-2 text-[11px] italic text-muted">"{athlete.rejectionReason}"</p>
         )}
 
-        <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2 text-xs">
+        <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2 text-xs max-md:[&>*]:inline-flex max-md:[&>*]:min-h-11 max-md:[&>*]:items-center max-md:[&>*]:px-4">
           <button onClick={onEdit} className="rounded-full border border-line px-3 py-1 text-muted hover:text-fg">Editar</button>
           {tab === "pending" && (
             <>

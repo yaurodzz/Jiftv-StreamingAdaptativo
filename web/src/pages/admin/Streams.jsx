@@ -59,7 +59,7 @@ export default function Streams() {
               role="tab"
               aria-selected={filter === f.key}
               onClick={() => setFilter(f.key)}
-              className={"rounded-full px-3 py-1 transition " + (filter === f.key ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+              className={"rounded-full px-3 py-1 transition max-md:min-h-11 " + (filter === f.key ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
             >
               {f.label} <span className="text-xs text-muted">{counts[f.key] || 0}</span>
             </button>

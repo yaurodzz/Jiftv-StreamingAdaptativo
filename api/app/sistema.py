@@ -7,7 +7,7 @@ import shutil
 import time
 import traceback
 
-from . import cloud, config, estado, fb, live, media
+from . import cloud, config, estado, fb, institucional, live, media
 
 INTERVALO = 20
 _inicio = time.time()
@@ -46,6 +46,7 @@ def publicar():
             "folder": config.CLOUDINARY_FOLDER,
             "retryMin": config.RETRY_INTERVAL_MIN,
         },
+        "institutional": institucional.estado(),
         "publicRecordings": config.GRAVACOES_PUBLICAS,
         "rtmpPort": config.RTMP_PORT,
         "firebaseEmulator": config.EMULADOR,

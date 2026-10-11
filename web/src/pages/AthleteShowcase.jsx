@@ -61,8 +61,8 @@ export default function AthleteShowcase() {
   }, [all, modalities]);
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <section className="mx-auto max-w-6xl px-4 py-6 md:py-10">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4 md:mb-8">
         <div>
           <h1 className="text-3xl font-semibold md:text-4xl">Atletas dos Jogos IFSC</h1>
           <p className="mt-2 max-w-2xl text-muted">
@@ -74,13 +74,13 @@ export default function AthleteShowcase() {
         </div>
       </header>
 
-      <div className="mb-8 flex flex-col gap-4">
+      <div className="mb-6 flex flex-col gap-4 md:mb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SearchBox value={q} onChange={setQ} placeholder="Buscar por nome, apelido ou posição…" />
           <select
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
-            className="input max-w-[220px]"
+            className="input sm:max-w-[220px]"
             aria-label="Filtrar por turma"
           >
             <option value="">Todas as turmas</option>
@@ -102,7 +102,7 @@ export default function AthleteShowcase() {
           onReset={() => { setQ(""); setModality(null); setClassId(""); }}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filtered.map((a) => <AthleteCard key={a.id} athlete={a} />)}
         </div>
       )}
@@ -112,7 +112,7 @@ export default function AthleteShowcase() {
 
 function SkeletonGrid() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="overflow-hidden rounded-2xl border border-line bg-surface">
           <div className="aspect-[4/5] animate-pulse bg-elevated" />

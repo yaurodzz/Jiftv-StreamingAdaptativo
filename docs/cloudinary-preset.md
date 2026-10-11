@@ -1,5 +1,9 @@
 # Cloudinary — preset unsigned para foto de atleta
 
+> **Só vale para o cadastro por upload.** Quando `INSTITUCIONAL_API_URL` está definida, a foto vem da API do
+> site institucional pela matrícula e este preset não é usado
+> (veja [integracao-site-institucional.md](integracao-site-institucional.md)).
+
 O cadastro público de atleta faz upload da foto **direto do navegador** para o Cloudinary,
 sem passar pelo servidor da escola. Isso exige um *upload preset* do tipo **unsigned** configurado
 para aceitar apenas imagens dentro de uma pasta dedicada.

@@ -44,7 +44,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <section className="mx-auto grid min-h-[70vh] max-w-md place-items-center px-4 py-16">
+    <section className="mx-auto grid min-h-[70vh] max-w-md place-items-center px-4 py-8 md:py-16">
       <form onSubmit={submit} className="card w-full p-6" noValidate>
         <h1 className="text-2xl font-semibold">Entrar no painel</h1>
         <p className="mt-1 text-sm text-muted">Acesso restrito à equipe do JIFTv.</p>
@@ -53,7 +53,12 @@ export default function AdminLogin() {
           E-mail
           <input
             type="email"
+            inputMode="email"
             autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="next"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -66,6 +71,7 @@ export default function AdminLogin() {
           <input
             type="password"
             autoComplete="current-password"
+            enterKeyHint="go"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}

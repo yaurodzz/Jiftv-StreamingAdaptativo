@@ -30,7 +30,7 @@ export default function OffAir({ stream }) {
   const ended = stream?.endedAt;
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-16">
+    <section className="mx-auto max-w-6xl px-4 py-10 md:py-16">
       <div className="mx-auto max-w-xl text-center">
         <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-line bg-surface">
           {stream ? <CalendarClock className="text-muted" /> : <Radio className="text-muted" />}
@@ -59,7 +59,7 @@ export default function OffAir({ stream }) {
       </div>
 
       {upcoming.length > 0 && (
-        <div className="mt-14">
+        <div className="mt-10 md:mt-14">
           <h2 className="mb-4 text-lg font-semibold">Próximas transmissões</h2>
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {upcoming.map((s) => (
@@ -81,10 +81,10 @@ export default function OffAir({ stream }) {
       )}
 
       {recent.length > 0 && (
-        <div className="mt-14">
+        <div className="mt-10 md:mt-14">
           <div className="mb-4 flex items-baseline justify-between">
             <h2 className="text-lg font-semibold">Gravações recentes</h2>
-            <Link to="/catalogo" className="text-sm text-muted hover:text-fg">Ver todas</Link>
+            <Link to="/catalogo" className="text-sm text-muted hover:text-fg max-md:inline-flex max-md:min-h-11 max-md:items-center">Ver todas</Link>
           </div>
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {recent.map((v) => (
