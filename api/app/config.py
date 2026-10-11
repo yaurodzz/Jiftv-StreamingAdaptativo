@@ -41,6 +41,8 @@ VIDEOS = PASTA_ATUAL / "videos"
 
 # Servidor interno do nginx (estatísticas e controle do RTMP)
 MEDIA_URL = _env("MEDIA_INTERNAL_URL", "http://media:8081").rstrip("/")
+# Entrada RTMP do nginx pela rede do Docker: destino da câmera do celular (camera.py)
+RTMP_INTERNO = _env("RTMP_INTERNAL_URL", "rtmp://media:1935/live").rstrip("/")
 TZ = ZoneInfo(_env("TZ") or "America/Sao_Paulo")
 
 # Firebase. Com FIRESTORE_EMULATOR_HOST definido, usa os emuladores (sem credenciais).

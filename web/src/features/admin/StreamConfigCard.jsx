@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Smartphone } from "lucide-react";
 import { env } from "../../lib/env.js";
 import { rotateKey, setKeyActive, subscribeStreamKey } from "../../services/streams.js";
 import { useToast } from "./ToastProvider.jsx";
@@ -65,6 +67,9 @@ export default function StreamConfigCard({ stream }) {
               {rtmp.copied ? "Copiado" : "Copiar"}
             </button>
           </div>
+          {/localhost|127\.0\.0\.1/.test(env.rtmpUrl) && (
+            <p className="mt-1 text-xs">Vale para o OBS no próprio servidor. De outro computador da rede, troque localhost pelo IP do servidor.</p>
+          )}
         </li>
         <li>
           <span className="text-fg">Chave de transmissão</span>
@@ -84,10 +89,19 @@ export default function StreamConfigCard({ stream }) {
         </li>
       </ol>
 
-      <details className="mt-4 rounded-xl border border-line bg-elevated/40 p-3 text-sm">
-        <summary className="cursor-pointer font-medium text-fg">Larix Broadcaster (celular)</summary>
+      <div className="mt-4 rounded-xl border border-line bg-elevated/40 p-3 text-sm">
+        <p className="font-medium text-fg">Sem OBS: câmera do celular</p>
+        <p className="mt-1 text-muted">Funciona de qualquer rede, inclusive 4G, direto pelo navegador do celular.</p>
+        <Link to={`/admin/transmissoes/${stream.id}/camera`} className="btn-ghost btn-sm mt-3 inline-flex">
+          <Smartphone size={15} /> Transmitir pelo celular
+        </Link>
+      </div>
+
+      <details className="mt-3 rounded-xl border border-line bg-elevated/40 p-3 text-sm">
+        <summary className="cursor-pointer font-medium text-fg">Larix Broadcaster (aplicativo)</summary>
         <p className="mt-2 text-muted">
-          Conexões → Nova → URL: <code className="break-all font-mono text-xs">{env.rtmpUrl}/{revealed && streamKey ? streamKey : "<chave>"}</code>
+          Só com o celular na mesma rede do servidor. Conexões → Nova → URL:{" "}
+          <code className="break-all font-mono text-xs">{env.rtmpUrl}/{revealed && streamKey ? streamKey : "<chave>"}</code>
         </p>
       </details>
 

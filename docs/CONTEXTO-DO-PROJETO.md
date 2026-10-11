@@ -20,6 +20,8 @@ O que a plataforma entrega:
 1. **Transmissão ao vivo** a partir do OBS Studio (ou DroidCam/Larix) por RTMP, convertida em várias
    qualidades (1080p/720p/480p/240p) e entregue em **HLS e DASH**, para o espectador receber
    automaticamente a melhor qualidade que a conexão dele aguenta (streaming adaptativo).
+   Também dá para transmitir a **câmera do celular pelo navegador**, de qualquer rede (4G), pela tela
+   "Transmitir pelo celular" do painel (WebSocket pelo túnel; veja [camera-celular.md](camera-celular.md)).
 2. **Gravação automática** de cada transmissão inteira, feita pelo módulo de gravação do próprio
    nginx-rtmp: um único MP4 por transmissão (não os segmentos do FFmpeg), salvo numa pasta local
    **e** enviado ao Cloudinary. A pasta local é o backup, porque o plano gratuito do Cloudinary
@@ -87,6 +89,8 @@ Ideias centrais (decisões tomadas e o porquê):
   alcança o servidor da escola; ele escreve pedidos na coleção `commands` e o worker responde no
   mesmo documento. Assim nada precisa ser exposto, exceto o vídeo.
 - **O navegador nunca fala com a porta 1935.** O OBS publica por RTMP; o player só consome HLS/DASH.
+  A câmera do celular chega por WebSocket (`/api/camera/<id>`) ao worker, e é um FFmpeg dentro do
+  container `api` que publica no RTMP pela rede do Docker (`api/app/camera.py`).
 - **Chave do OBS ≠ nome público.** A chave secreta (`streamKeys/{id}`, só admin lê) é trocada pelo
   `slug` público da transmissão no `on_publish` (resposta 302 com `Location: <slug>`). Por isso HLS,
   DASH e a pasta da gravação usam o slug, nunca a chave. Também é aceito `<slug>?key=<chave>`.
@@ -150,6 +154,8 @@ Jiftv-Streaming-Adaptativo/
 │   │                                      kit zip para o professor (JIFTv-API-Fotos-Professor.zip)
 │   ├── dominio-cloudflare.md    jiftv.org, túnel, RTMP, Firebase Hosting, CORS
 │   ├── mobile.md                adaptação do site para celular (abaixo de 768px): diagnóstico e mudanças
+│   ├── camera-celular.md        câmera do celular pelo navegador (4G, sem localhost): como funciona,
+│   │                            como colocar no ar, o que foi testado, alternativas (Tailscale, porta 1935)
 │   ├── armazenamento.md         pasta local, Google Drive e Cloudinary: chaves do painel, pasta escolhida,
 │   │                            como o vídeo do Drive toca, passo a passo do OAuth do Google
 │   └── CONTEXTO-DO-PROJETO.md   (este arquivo)
@@ -375,6 +381,10 @@ Variáveis do site (`web/.env.example`): `VITE_FIREBASE_*`, `VITE_MEDIA_URL`, `V
 ## 9. O que NÃO foi testado / está pendente
 
 Nada disto roda ainda em produção:
+
+0. **Câmera do celular pelo navegador** (2026-10-11): servidor no ar (containers recriados, rota conferida pelo
+   túnel), mas o site ainda não foi republicado; falta o teste com um celular real no 4G.
+   Passos em [camera-celular.md](camera-celular.md).
 
 1. **Projeto Firebase real** (`jiftv-stream`, conta jiftv24@gmail.com no `firebase-tools`): em 2026-10-07 o usuário
    fez o primeiro deploy do site novo; ele quebrou com `auth/invalid-api-key` (build sem `web/.env`). `web/.env` foi

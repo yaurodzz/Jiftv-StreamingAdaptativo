@@ -17,6 +17,7 @@ const AdminLayout   = lazy(() => import("./pages/admin/AdminLayout.jsx"));
 const Dashboard     = lazy(() => import("./pages/admin/Dashboard.jsx"));
 const Streams       = lazy(() => import("./pages/admin/Streams.jsx"));
 const StreamDetail  = lazy(() => import("./pages/admin/StreamDetail.jsx"));
+const StreamCamera  = lazy(() => import("./pages/admin/StreamCamera.jsx"));
 const Recordings    = lazy(() => import("./pages/admin/Recordings.jsx"));
 const Modalities    = lazy(() => import("./pages/admin/Modalities.jsx"));
 const SystemPage    = lazy(() => import("./pages/admin/System.jsx"));
@@ -60,6 +61,7 @@ export default function App() {
                     <Route index element={<Dashboard />} />
                     <Route path="transmissoes" element={<Streams />} />
                     <Route path="transmissoes/:id" element={<StreamDetail />} />
+                    <Route path="transmissoes/:id/camera" element={<StreamCamera />} />
                     <Route path="gravacoes" element={<Recordings />} />
                     <Route path="atletas" element={<AdminAthletes />} />
                     <Route path="modalidades" element={<Modalities />} />

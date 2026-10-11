@@ -5,6 +5,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     TZ=America/Sao_Paulo
 
+# FFmpeg: recebe a câmera do celular (WebSocket, app/camera.py) e publica no nginx-rtmp
+RUN apt-get update  && apt-get install -y --no-install-recommends ffmpeg  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/jiftv-api
 
 COPY requirements.txt .

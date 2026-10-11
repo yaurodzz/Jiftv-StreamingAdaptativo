@@ -11,6 +11,7 @@ em **2026-10-07**.
 | **Streaming**: HLS, DASH, miniaturas, fotos e gravações | servidor da escola, container `media` | `https://live.jiftv.org` | túnel `jiftv` → `http://media:80` |
 | **Backend**: `/api/*` do worker (espectadores, cadastro de atletas) | servidor da escola, container `api` | `https://api.jiftv.org` | túnel `jiftv` → `http://media:80` → worker |
 | Entrada do OBS (RTMP, porta 1935) | servidor da escola | `rtmp://<host>:1935/live` | **não passa pelo túnel HTTP** (veja abaixo) |
+| Entrada da **câmera do celular** (WebSocket) | servidor da escola, container `api` | `wss://api.jiftv.org/api/camera/<id>` | túnel `jiftv` → `media:80` → worker → FFmpeg → RTMP interno ([camera-celular.md](camera-celular.md)) |
 
 Por que o backend também entra pelo `media`: o nginx desse container já encaminha `/api/*` ao worker e é ele que
 garante que os ganchos `/internal/*` (validação da chave do OBS, aviso de gravação) **nunca** fiquem expostos. No
@@ -59,12 +60,16 @@ escola pode falsificar esse cabeçalho; mantenha a porta 8080 fechada para fora 
 O túnel e o proxy da Cloudflare (planos gratuitos) carregam HTTP/HTTPS, **não** a porta RTMP 1935 que o OBS usa.
 Opções:
 
+- **Celular de qualquer rede (4G)**: desde 2026-10-11, a tela "Transmitir pelo celular" do painel envia a câmera
+  pelo navegador por WebSocket, que passa pelo túnel. É o caminho recomendado fora da escola e não precisa de
+  porta aberta. Detalhes, limites e alternativas (Tailscale + Larix) em [camera-celular.md](camera-celular.md).
 - **OBS dentro da rede da escola**: use o IP do servidor na rede local (`rtmp://192.168.x.x:1935/live`).
 - **OBS de fora**: libere a porta 1935 no roteador (encaminhamento para o servidor) e crie um registro DNS
   **sem proxy** ("nuvem cinza"), por exemplo `rtmp.jiftv.org`, apontando para o IP público da escola, com
   `VITE_RTMP_URL=rtmp://rtmp.jiftv.org:1935/live`. Esse nome só serve para o OBS; o espectador nunca o usa.
 
-Ainda não decidido; por isso `web/.env.production` não define `VITE_RTMP_URL`.
+Para o OBS de fora ainda não há decisão; por isso `web/.env.production` não define `VITE_RTMP_URL` e o painel
+mostra `rtmp://localhost:1935/live`, com o aviso de que esse endereço só vale no próprio servidor.
 
 ## Firebase Hosting no jiftv.org
 
@@ -115,3 +120,5 @@ libera `Access-Control-Allow-Origin: *` para HLS/DASH/miniaturas/gravações (v�
 - Desativar o serviço do Windows `cloudflared` (opcional, evita conflito futuro).
 - Deploy do site novo no Firebase Hosting com a conta dona do projeto (substitui o site antigo).
 - Decidir como o OBS chega ao servidor fora da escola (IP público + `rtmp.jiftv.org` sem proxy, ou só rede local).
+  Para o celular isso já está resolvido pelo navegador ([camera-celular.md](camera-celular.md)), faltando republicar
+  o site e testar com um celular no 4G (os containers já foram recriados em 2026-10-11).
