@@ -17,15 +17,16 @@ from pathlib import Path
 
 from google.api_core.exceptions import AlreadyExists
 
-from . import cloud, config, estado, fb
+from . import armazenamento, cloud, config, drive, estado, fb
 
 EXTENSOES = (".mp4", ".flv")
-SUFIXOS = (".mp4", ".flv", ".jpg", ".info.json", ".cloudinary.json", ".cloudinary-erro.txt")
+SUFIXOS = (".mp4", ".flv", ".jpg", ".info.json", ".cloudinary.json", ".cloudinary-erro.txt", ".drive.json")
 DATA_NO_NOME = re.compile(r"_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})$")
 
 _acordar = threading.Event()
 _lock = threading.Lock()
 _recentes = set()  # registradas há pouco, antes de o ouvinte do Firestore atualizar a cópia local
+_liberadas = set()  # cópias locais apagadas de propósito (pasta local desligada no painel)
 
 
 def acordar():
@@ -67,7 +68,7 @@ def _cloud_inicial(stem):
             return {"status": "uploaded", "publicId": dados.get("public_id"), "secureUrl": dados.get("secure_url")}
         except (OSError, ValueError):
             pass
-    return {"status": "pending" if cloud.configurado() else "disabled"}
+    return {"status": "pending" if cloud.ativo() else "disabled"}
 
 
 def _arquivos_na_pasta():
@@ -121,6 +122,7 @@ def _registrar(stem, rel, p):
         "playbackUrl": cloud_status.get("secureUrl"),
         "thumbnailUrl": None,
         "cloudinary": cloud_status,
+        "drive": {"status": "pending" if drive.ativo() else "disabled"},
         **_ler_info(stem),
     }
     for n in range(1, 50):
@@ -146,6 +148,7 @@ def _atualizar(vid, v, rel, p):
         mudancas["bytes"] = tamanho
     if not v.get("localAvailable"):
         mudancas["localAvailable"] = True
+        mudancas["localRemovedAt"] = None
     stem = rel.rsplit(".", 1)[0]
     miniatura = f"{stem}.jpg" if (config.VIDEOS / f"{stem}.jpg").exists() else None
     if v.get("localThumb") != miniatura:
@@ -158,8 +161,47 @@ def _atualizar(vid, v, rel, p):
         fb.db().collection("vods").document(vid).update(mudancas)
 
 
+def _na_nuvem(v):
+    """Onde há uma cópia confirmada do vídeo fora do computador (ou None)."""
+    d = v.get("drive") or {}
+    if d.get("status") == "uploaded" and d.get("fileId"):
+        return "Google Drive"
+    if (v.get("cloudinary") or {}).get("status") == "uploaded" and v.get("playbackUrl"):
+        return "Cloudinary"
+    return None
+
+
+def _pode_liberar(v):
+    """Pasta local desligada: a cópia do computador só sai com o vídeo confirmado na nuvem
+    e sem envio pendente para nenhum destino ligado."""
+    if armazenamento.local_ligado() or not v.get("localFile") or not v.get("localAvailable"):
+        return False
+    if not _na_nuvem(v):
+        return False
+    for ligado, situacao in ((drive.ativo(), v.get("drive") or {}), (cloud.ativo(), v.get("cloudinary") or {})):
+        status = situacao.get("status")
+        if not ligado or status == "uploaded":
+            continue
+        if status == "failed" and not situacao.get("nextAttemptAt"):
+            continue  # falha definitiva (ex.: limite do plano): não adianta esperar por este destino
+        return False
+    return True
+
+
+def _liberar(vid, v):
+    """Apaga só o vídeo; miniatura e metadados (pequenos) continuam servindo ao catálogo."""
+    stem = v["localFile"].rsplit(".", 1)[0]
+    onde = _na_nuvem(v)
+    (config.VIDEOS / v["localFile"]).unlink(missing_ok=True)
+    _liberadas.add(stem)
+    fb.db().collection("vods").document(vid).update({"localAvailable": False, "localRemovedAt": fb.SERVER_TIMESTAMP})
+    fb.evento("gravacao", f"Cópia local apagada (pasta local desligada): {v['localFile']} · continua no {onde}")
+
+
 def sincronizar():
     """Retorna quantas gravações novas foram registradas."""
+    if armazenamento.movendo():
+        return 0  # os vídeos estão sendo levados para a pasta nova; a varredura volta ao terminar
     with _lock:
         achados = _arquivos_na_pasta()
         locais = {vid: v for vid, v in estado.copia_vods().items() if v.get("localFile")}
@@ -167,12 +209,16 @@ def sincronizar():
 
         # Pasta vazia ou ausente com gravações registradas: provavelmente o volume não foi
         # montado. Não mexe em nada para não marcar o acervo inteiro como indisponível.
-        if not achados and locais:
+        if not achados and any(v.get("localAvailable") for v in locais.values()):
             print("[jiftv] pasta de gravações vazia; sincronização ignorada", flush=True)
             return 0
 
         for vid, v in locais.items():
             stem = v["localFile"].rsplit(".", 1)[0]
+            if stem in _liberadas:
+                if not v.get("localAvailable"):
+                    _liberadas.discard(stem)  # o Firestore já refletiu a remoção
+                continue
             if stem not in achados and v.get("localAvailable"):
                 fb.db().collection("vods").document(vid).update({"localAvailable": False})
                 fb.evento("gravacao", f"Arquivo local não encontrado: {v['localFile']}"
@@ -189,8 +235,17 @@ def sincronizar():
                     novas += 1
             except OSError:
                 continue  # arquivo sumiu durante a varredura
+
+        for vid, v in locais.items():
+            stem = v["localFile"].rsplit(".", 1)[0]
+            try:
+                if stem in achados and stem not in _liberadas and _pode_liberar(v):
+                    _liberar(vid, v)
+            except OSError:
+                continue
     if novas:
         cloud.acordar()
+        drive.acordar()
     return novas
 
 

@@ -1,7 +1,8 @@
 # JIFTv: contexto técnico do projeto
 
 Documento para retomar o desenvolvimento em um chat novo sem perder contexto.
-Estado descrito: **2026-10-07** (inclui a integração com o site institucional e os subdomínios live/api.jiftv.org no túnel). Para o passo a passo de uso, veja também o [README.md](../README.md).
+Estado descrito: **2026-10-11** (inclui a integração com o site institucional, os subdomínios live/api.jiftv.org no túnel
+e o armazenamento configurável das gravações: pasta local, Google Drive e Cloudinary). Para o passo a passo de uso, veja também o [README.md](../README.md).
 
 > Dica para o novo chat: anexe este arquivo e o README, e diga qual item da seção
 > "Próximos passos" quer atacar.
@@ -22,7 +23,9 @@ O que a plataforma entrega:
 2. **Gravação automática** de cada transmissão inteira, feita pelo módulo de gravação do próprio
    nginx-rtmp: um único MP4 por transmissão (não os segmentos do FFmpeg), salvo numa pasta local
    **e** enviado ao Cloudinary. A pasta local é o backup, porque o plano gratuito do Cloudinary
-   limita o tamanho do vídeo (~100 MB).
+   limita o tamanho do vídeo (~100 MB). Desde 2026-10-11 o destino é escolhido no painel (aba
+   **Armazenamento**): pasta local, Google Drive e Cloudinary, cada um com liga/desliga, e a pasta local
+   pode ser trocada pelo painel. Detalhes em [armazenamento.md](armazenamento.md).
 3. **Catálogo** de gravações por modalidade, **vitrine de atletas** com cadastro público moderado e
    **scout** (marcação de eventos dos atletas sobre as gravações).
 4. **Painel administrativo** para gerenciar transmissões (chave do OBS, placar, encerrar), gravações,
@@ -40,6 +43,10 @@ Decisões mais recentes do usuário:
   os alunos. O JIFTv consulta essa API pela **matrícula escolar** (o worker faz a chamada). O contrato real da
   API ainda **não foi confirmado**: o JIFTv assume um formato configurável. Detalhes e perguntas para o
   professor em [integracao-site-institucional.md](integracao-site-institucional.md).
+- **Gravações no Google Drive, sem ocupar o computador** (2026-10-11): o usuário tem ~400 GB livres no Drive
+  e não quer pagar o Cloudinary. O worker envia cada gravação ao Drive, confere e (com a pasta local desligada)
+  apaga a cópia do computador; o site toca o vídeo do Drive por meio do worker. Tudo é comandado pela aba
+  Armazenamento do painel. Detalhes em [armazenamento.md](armazenamento.md).
 - **Servidores no domínio `jiftv.org`** (Cloudflare): site em `jiftv.org` (Firebase Hosting), streaming em
   **`live.jiftv.org`** e backend (`/api/*` do worker) em **`api.jiftv.org`**, os dois pelo túnel `jiftv` da
   Cloudflare, que já existia. Detalhes e pendências em [dominio-cloudflare.md](dominio-cloudflare.md).
@@ -64,6 +71,7 @@ Decisões mais recentes do usuário:
 │ api    = worker Python (FastAPI + firebase-admin)                   │
 │   valida chave, marca ao vivo, registra gravações no Firestore,     │──saída──► Firestore / Auth
 │   fila de envio ao Cloudinary, cadastro público de atletas,         │──saída──► Cloudinary
+│   fila de envio ao Google Drive e repasse do vídeo ao player,       │──saída──► Google Drive
 │   executa pedidos do painel, publica estado do servidor             │
 └─────────────────────────────────────────────────────────────────────┘
 ┌──────────────────────────── Firebase ───────────────────────────────┐
@@ -91,6 +99,13 @@ Ideias centrais (decisões tomadas e o porquê):
   e grava a matrícula só em `athletePrivate/{id}` (admin). Sem `INSTITUCIONAL_API_URL`, volta ao upload.
 - **A pasta de vídeos é a fonte da verdade das gravações.** O worker sincroniza
   `gravacoes/videos/` → coleção `vods` (varredura de 60 s + aviso do script ao terminar).
+- **Armazenamento configurável** ([armazenamento.md](armazenamento.md)): a configuração (chaves liga/desliga e pasta
+  local) fica no volume `jiftv-estado`, não no Firestore; o painel a lê e grava pelo worker (`/api/armazenamento`,
+  com ID token de admin). A pasta local escolhida é um atalho (`/var/jiftv/atual`) que o nginx segue, então trocar
+  de pasta não reinicia nada. A "fonte da verdade" continua sendo a pasta atual, mas um vídeo pode existir só no
+  Drive (`localAvailable: false` + `localRemovedAt`) quando a pasta local está desligada.
+- **Google Drive**: fila igual à do Cloudinary (`vods.drive.status`), envio retomável conferido por MD5. O Drive não
+  serve vídeo a player, então `GET /api/video/<id>` no worker busca e repassa (com `Range`).
 - **Cloudinary**: fila baseada no próprio Firestore (`vods.cloudinary.status`). O botão "Reenviar" só
   muda o status para `pending`. A cópia local **nunca** é apagada pelo envio.
 - **Túnel com configuração remota**: o túnel `jiftv` foi configurado pelo painel da Cloudflare, então as rotas do
@@ -104,11 +119,11 @@ Ideias centrais (decisões tomadas e o porquê):
 | Camada | Tecnologia |
 |---|---|
 | Ingestão/entrega | nginx 1.22 + libnginx-mod-rtmp 1.1.4 (Debian bookworm), FFmpeg (libx264, AAC, muxer `tee`) |
-| Worker | Python 3.12, FastAPI + uvicorn, `firebase-admin` 6, `cloudinary` 1.x |
+| Worker | Python 3.12, FastAPI + uvicorn, `firebase-admin` 6, `cloudinary` 1.x, `requests` (API do Drive) |
 | Banco/Auth/Hosting | Firebase: Firestore, Authentication, Hosting; emuladores via `firebase-tools@13` + OpenJDK 17 (container) |
 | Site | React 18, Vite 5, Tailwind 3 (`darkMode: 'class'`), react-router 6, `hls.js` 1.5, `dashjs` **4.7** (carregados por import dinâmico), `lucide-react`, Inter variável |
 | Infra | Docker Compose; serviços `media`, `api`, `emulators` (perfil `dev`), `tunnel` (perfil `tunel`) |
-| Mídia na nuvem | Cloudinary (vídeo das gravações; fotos de atletas: cópia vinda do site institucional, ou upload com preset *unsigned*) |
+| Mídia na nuvem | Google Drive (gravações, OAuth da conta do usuário, escopo `drive.file`); Cloudinary (vídeo das gravações; fotos de atletas: cópia vinda do site institucional, ou upload com preset *unsigned*) |
 | Integrações | API do site institucional (fotos pela matrícula); domínio `jiftv.org` na Cloudflare (túnel `jiftv`: `live.` e `api.jiftv.org`) |
 
 Ambiente de desenvolvimento do usuário: Windows 11, Docker Desktop 28.5.1, Node 20.19, Python 3.13 local,
@@ -135,11 +150,14 @@ Jiftv-Streaming-Adaptativo/
 │   │                                      kit zip para o professor (JIFTv-API-Fotos-Professor.zip)
 │   ├── dominio-cloudflare.md    jiftv.org, túnel, RTMP, Firebase Hosting, CORS
 │   ├── mobile.md                adaptação do site para celular (abaixo de 768px): diagnóstico e mudanças
+│   ├── armazenamento.md         pasta local, Google Drive e Cloudinary: chaves do painel, pasta escolhida,
+│   │                            como o vídeo do Drive toca, passo a passo do OAuth do Google
 │   └── CONTEXTO-DO-PROJETO.md   (este arquivo)
 ├── tools/mock_institucional.py  API de mentira do site institucional (matrículas de teste)
 ├── secrets/                     .gitkeep ; firebase-service-account.json (produção), cloudflared-tunel.json (túnel),
 │                                backups/ (cópia do Firestore antes da migração) e env-emuladores.bak (.env de dev)
-├── gravacoes/                   montada em /recordings nos containers
+├── gravacoes/                   montada em /recordings nos containers (pasta padrão; a pasta das gravações pode
+│                                ser outra, escolhida no painel dentro de PASTAS_DO_PC, montada em /pc)
 │   ├── fotos/                   fotos de atletas vindas do site institucional (sem Cloudinary); nginx /fotos/
 │   ├── em_andamento/            .flv em gravação
 │   ├── videos/<slug>/           <slug>_AAAA-MM-DD_HH-MM-SS.mp4 + .jpg + .info.json (+ .cloudinary.json)
@@ -165,7 +183,10 @@ Jiftv-Streaming-Adaptativo/
 │       ├── media.py             lê /stat do nginx-rtmp; derruba publicador (/control)
 │       ├── recordings.py        pasta de vídeos → coleção vods ; excluir arquivos
 │       ├── cloud.py             fila de envio ao Cloudinary ; excluir no Cloudinary
-│       ├── comandos.py          coleção commands: delete_vod, resync, logs
+│       ├── armazenamento.py     configuração dos destinos, pastas do computador, atalho da pasta local
+│       ├── drive.py             Google Drive: OAuth, fila de envio, lixeira, leitura para o player
+│       ├── rotas_armazenamento.py  /api/armazenamento, /api/drive/*, /api/video/<id>
+│       ├── comandos.py          coleção commands: delete_vod (local, Cloudinary, lixeira do Drive), resync, logs
 │       ├── sistema.py           publica system/server a cada 20 s ; limpa events
 │       ├── routes.py            /internal/* (nginx) e /api/saude, /api/audiencia, /api/arquivo-auth
 │       ├── atletas.py           GET /api/atletas/config e POST /api/atletas (cadastro público: matrícula ou upload)
@@ -180,13 +201,14 @@ Jiftv-Streaming-Adaptativo/
 │       ├── App.jsx, main.jsx, index.css (tokens do Tema IF)
 │       ├── lib/        firebase, env, media (URLs HLS/DASH/arquivos), format, cloudinary, streamKey, uploadPhoto
 │       ├── providers/  Theme, Auth (claim admin), LiveStatus
-│       ├── services/   streams, vods, modalities, classes, athletes, scoutEvents, commands, system, publicApi
+│       ├── services/   streams, vods, modalities, classes, athletes, scoutEvents, commands, system, publicApi,
+│       │               storage (aba Armazenamento: fala direto com o worker)
 │       ├── player/     createPlayer (adapter hls.js/dash.js/nativo), loadHls, loadDash
 │       ├── components/ layout/, routing/, ui/
 │       ├── features/   live/, catalog/, athletes/, admin/
 │       └── pages/      Live, Catalog, MatchPage, AthleteShowcase/Page/Submit, ScoutPage, AdminLogin,
 │                       NotFound, admin/{AdminLayout,Dashboard,Streams,StreamDetail,Recordings,
-│                       Athletes,Modalities,Classes,System}
+│                       Storage,Athletes,Modalities,Classes,System}
 └── .claude/launch.json          config "web" (npm --prefix web run dev, porta 5173)
 ```
 
@@ -200,11 +222,11 @@ Jiftv-Streaming-Adaptativo/
 | `classes` | painel | `name`, `campus` |
 | `streams` | painel + worker | painel: `title`, `slug`, modalidade (`modalityId/Code/Name`), `location`, `teamA/B`, `scoreA/B`, `scheduledFor`, `listed`, `keyActive`, `description`. Worker: `isLive`, `startedAt`, `endedAt`, `viewers`, `peakViewers`, `input{width,height,fps,bitrate,codecs}`, `qualitiesActive/Total`, `clientId`, `origin` |
 | `streamKeys/{streamId}` | painel | `streamKey` (20 chars Crockford base32). **Só admin lê** |
-| `vods` | worker + painel | ID `AAAAMMDD-COD-HHMMSS`. `title`, `modality*`, `recordedAt`, `durationSec`, `width/height`, `bytes`, `localFile`, `localThumb`, `localAvailable`, `visible`, `views`, `playbackUrl`/`thumbnailUrl` (Cloudinary), `cloudinary{status,error,attempts,nextAttemptAt,publicId,secureUrl}`, `sourceStreamId`, `streamSlug`, `teamA/B`, `scoreA/B` |
+| `vods` | worker + painel | ID `AAAAMMDD-COD-HHMMSS`. `title`, `modality*`, `recordedAt`, `durationSec`, `width/height`, `bytes`, `localFile`, `localThumb`, `localAvailable`, `visible`, `views`, `playbackUrl`/`thumbnailUrl` (Cloudinary), `cloudinary{status,error,attempts,nextAttemptAt,publicId,secureUrl}`, `drive{status,fileId,thumbId,infoId,webViewLink,bytes,md5,progress,error,attempts,nextAttemptAt}`, `localRemovedAt`, `sourceStreamId`, `streamSlug`, `teamA/B`, `scoreA/B` |
 | `athletePrivate/{athleteId}` | worker | `matricula`, `modalityCode`, `institutionalName` (nome devolvido pela API), `photoSource`, `verifiedAt`. **Só admin lê/apaga** |
 | `athletes` | worker (cadastro) + painel | `name`, `nickname`, `birthDate`, `photoUrl` (Cloudinary) **ou** `photoPath` (`fotos/<id>.<ext>`, servido pelo media), `photoSource` (`institucional`/`upload`), `jerseyNumber`, `position`, `bio`, `modalityCode/Name`, `classId/Name/Campus`, `status` (`pending`/`approved`/`rejected`), `submittedAt/Ip/ByName/ByEmail`, `approvedAt/By`, `rejectedAt/By/Reason` |
 | `scoutEvents` | painel | `matchId` (id do vod), `matchType`, `athleteId/Name`, `modalityCode`, `type`, `value`, `videoTime`, `note`, `createdAt/By` |
-| `system/server` | worker | estado do servidor a cada 20 s: `lastSeen`, `media{...}`, `disk`, `recordings`, `cloudinary`, `institutional{configured,host,mode,lastAt,lastOk,lastError}`, `qualities`, `viewers` |
+| `system/server` | worker | estado do servidor a cada 20 s: `lastSeen`, `media{...}`, `disk`, `recordings`, `cloudinary`, `storage{local,drive,cloudinary}`, `institutional{configured,host,mode,lastAt,lastOk,lastError}`, `qualities`, `viewers` |
 | `events` | worker | histórico exibido no painel (`type`, `message`, `at`) |
 | `commands` | painel → worker | `type` (`delete_vod`/`resync`/`logs`), `payload`, `status` (`pending`/`running`/`done`/`error`), `result`/`error` |
 
@@ -239,7 +261,10 @@ A cada 10 s o worker reconcilia com `/stat` do nginx e publica resolução/bitra
 
 **Gravar**: `record all` do nginx → `.flv` único → `on_record_done.sh` converte para MP4 (`-c copy`,
 `+faststart`), gera `.jpg`/`.info.json`, avisa `/internal/gravacao` → worker cria `vods/<id>` (visível
-conforme `GRAVACOES_PUBLICAS`) → fila do Cloudinary. O site toca do Cloudinary se existir, senão de `/arquivos/...`.
+conforme `GRAVACOES_PUBLICAS`) → filas dos destinos ligados em Painel > Armazenamento (Google Drive, Cloudinary).
+Com a pasta local desligada, o MP4 é apagado do computador depois de confirmado na nuvem. O site toca do Cloudinary
+se existir, senão de `/arquivos/...`, senão do Drive por `/api/video/<id>` (worker). O `.flv` e o MP4 ficam na pasta
+local escolhida no painel (`/var/jiftv/atual`, por padrão `gravacoes/`).
 Gravações ocultas só abrem com `?token=<ID token de admin>` (nginx `auth_request` → `/api/arquivo-auth`).
 
 **Excluir gravação / ler logs / reverificar pasta**: painel cria documento em `commands`; worker executa.
@@ -256,9 +281,10 @@ na modalidade). Modo **upload**: foto direto ao Cloudinary (preset unsigned `ath
 clicar no evento (grava `videoTime`). Tipos de evento por modalidade em Painel → Modalidades → Scout.
 
 Rotas do site: `/live`, `/live/:slug`, `/catalogo`, `/partidas/:id`, `/atletas`, `/atletas/novo`,
-`/atletas/:id`, `/admin/login`, `/admin` (visão geral), `/admin/{transmissoes,transmissoes/:id,gravacoes,
+`/atletas/:id`, `/admin/login`, `/admin` (visão geral), `/admin/{transmissoes,transmissoes/:id,gravacoes,armazenamento,
 atletas,modalidades,turmas,sistema}`, `/scout/:vodId`. Rotas do worker: `/internal/{publish,publish_done,gravacao}`
-(só rede interna), `/api/{saude,audiencia,arquivo-auth,atletas}`.
+(só rede interna), `/api/{saude,audiencia,arquivo-auth,atletas}`, e as do armazenamento:
+`/api/armazenamento`, `/api/armazenamento/pastas`, `/api/drive/{conectar,callback,desconectar}`, `/api/video/<id>`.
 
 ---
 
@@ -320,7 +346,8 @@ Portas: 1935 RTMP · 8080 mídia (HLS/DASH/arquivos/api) · 5173 site (dev) · 4
 
 Variáveis do `.env` da raiz (só os nomes): `FIREBASE_PROJECT_ID`, `FIRESTORE_EMULATOR_HOST`,
 `FIREBASE_AUTH_EMULATOR_HOST`, `CLOUDINARY_URL`, `CLOUDINARY_FOLDER`, `RETRY_INTERVAL_MIN`, `QUALIDADES`,
-`AUDIO_BITRATE`, `X264_PRESET`, `GRAVACOES_PUBLICAS`, `RTMP_PORT`, `HTTP_PORT`, `RECORDINGS_DIR`, `TZ`,
+`AUDIO_BITRATE`, `X264_PRESET`, `GRAVACOES_PUBLICAS`, `RTMP_PORT`, `HTTP_PORT`, `RECORDINGS_DIR`, `PASTAS_DO_PC`, `TZ`,
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `API_PUBLIC_URL` (Google Drive),
 `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD`, e (fotos pela matrícula / CORS)
 `INSTITUCIONAL_API_URL`, `INSTITUCIONAL_API_TOKEN`, `INSTITUCIONAL_API_HEADER`, `INSTITUCIONAL_API_PATH`,
 `INSTITUCIONAL_API_PHOTO_FIELDS`, `INSTITUCIONAL_API_NAME_FIELDS`, `INSTITUCIONAL_PHOTO_HOSTS`,
@@ -377,6 +404,12 @@ Nada disto roda ainda em produção:
    (o painel prevalece sobre `cloudflared/config.yml`); `/healthz`, `/api/saude` e o bloqueio de `/internal` testados.
    Falta testar uma transmissão e uma gravação pelo domínio. `jiftv.org` já está no
    Firebase Hosting com o site **antigo**, num projeto fora da conta logada no `firebase-tools` desta máquina.
+   2d. **Armazenamento configurável / Google Drive** (2026-10-11): código pronto e testado em ambiente isolado
+   (emuladores + Drive de mentira, 63 verificações; tela conferida no navegador), mas **não está no ar**: os
+   containers de produção ainda rodam a versão anterior. Falta `docker compose --profile tunel up -d --build`,
+   criar o cliente OAuth no Google Cloud, preencher `GOOGLE_OAUTH_CLIENT_ID/SECRET`, conectar a conta pelo painel
+   e publicar o site. Nunca rodou contra o Google Drive real nem com uma transmissão RTMP real gravando pelo
+   atalho da pasta. Passo a passo e lista do que foi/não foi testado em [armazenamento.md](armazenamento.md).
 3. **OBS real, DroidCam, Larix** e rede escolar real: só houve simulação com FFmpeg.
 4. **HTTPS do vídeo / túnel da Cloudflare**: funcionando (item 2c), sem transmissão real testada. Encaminhamento
    da porta 1935 (OBS de fora da escola): não configurado.
@@ -419,6 +452,11 @@ Nada disto roda ainda em produção:
   em outro disco). O projeto **é um repositório git** (branch `master`, 1º commit `56fa730`, sem remoto; o push
   para `github.com/yaurodzz/...` falhou porque o repositório ainda não foi criado). As mudanças desta
   atualização (integração institucional, domínio, CORS) **ainda não foram commitadas**.
+- **Vídeos só no Drive dependem do servidor ligado**: com a pasta local desligada, o player recebe o vídeo pelo
+  worker (`/api/video/<id>`), usando a internet da escola nos dois sentidos. A autorização do Drive (`drive.json`)
+  e a configuração ficam no volume `jiftv-estado`: `docker compose down -v` apaga os dois (os vídeos continuam no
+  Drive, mas é preciso reconectar a conta). `PASTAS_DO_PC` define o que o painel pode navegar no computador; um
+  valor amplo (disco inteiro) deixa um admin do painel listar nomes de pastas e criar pastas nesse disco.
 - O `.env` foi sobrescrito uma vez sem leitura prévia (os containers ainda estavam com os valores padrão, então
   não se perdeu configuração conhecida).
 - Resquícios no Docker: volume `jiftv-streaming-adaptativo_jiftv-dados` (SQLite da versão antiga, sem uso) e
@@ -443,6 +481,9 @@ Nada disto roda ainda em produção:
    lista em [integracao-site-institucional.md](integracao-site-institucional.md)), ajustar o `.env` (e, se o
    contrato for diferente, `api/app/institucional.py`) e testar com matrículas reais.
 3. **Corrigir os vazamentos de privacidade** da seção 10 (campos privados de `athletes`, `origin` de `streams`).
+3b. **Colocar o armazenamento novo no ar** ([armazenamento.md](armazenamento.md), seção 5): reconstruir os
+   containers, criar o cliente OAuth, conectar o Drive, ligar a chave, gravar um jogo de teste e só então desligar
+   a pasta local. Para usar outro disco, definir `PASTAS_DO_PC`.
 4. **Testar Cloudinary de verdade**: `CLOUDINARY_URL`, um MP4 pequeno e um grande (limite de plano), falha e
    nova tentativa, "Reenviar"; foto de atleta indo para `athletes/pending` (modo matrícula). O preset
    `athletes_profile` só é necessário se o cadastro ficar no modo upload.
@@ -478,3 +519,14 @@ Nada disto roda ainda em produção:
   antes de exportar os dados; por isso `stop_grace_period: 60s`. Dados de teste podem sumir se isso falhar.
 - `docker compose` lê o `.env` da raiz: mudar uma variável exige `docker compose up -d <serviço>` (recria o container).
 - Matrículas de teste e o mock: `tools/mock_institucional.py` (docstring lista os casos).
+- **Relógio do PC atrasado derruba o login no worker** (2026-10-11): o relógio desta máquina estava 43 s atrás do
+  horário real, e o `verify_id_token` recusava todo ID token recém-emitido ("usado cedo demais"), dando 401 em
+  `/api/armazenamento` (e em `/arquivos/...?token=`) por ~45 s depois de cada login ou renovação de token.
+  `fb.verificar_admin` agora tolera até 60 s (`clock_skew_seconds=60`, o máximo do SDK). Com atraso maior que isso
+  o 401 volta: sincronize o relógio do Windows (Configurações > Hora e idioma > Sincronizar agora).
+- O emulador do Firestore roda em "single project mode": um worker de teste com outro `FIREBASE_PROJECT_ID` enxerga
+  uma cópia dos dados exportados, separada do `demo-jiftv`. No emulador de Auth, o login por REST com outro projeto
+  precisa de `targetProjectId` no corpo e `Authorization: Bearer owner`.
+- Para testar o worker sem tocar na produção: container descartável da imagem `jiftv-api` com `api/app` montado,
+  `JIFTV_ESTADO`/`JIFTV_RECORDINGS`/`JIFTV_PASTAS` apontando para pastas temporárias e os emuladores em
+  `host.docker.internal:8085/9099` (fora da rede do compose, para não alcançar o `media` real).

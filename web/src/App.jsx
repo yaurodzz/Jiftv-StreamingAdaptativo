@@ -20,6 +20,7 @@ const StreamDetail  = lazy(() => import("./pages/admin/StreamDetail.jsx"));
 const Recordings    = lazy(() => import("./pages/admin/Recordings.jsx"));
 const Modalities    = lazy(() => import("./pages/admin/Modalities.jsx"));
 const SystemPage    = lazy(() => import("./pages/admin/System.jsx"));
+const StoragePage   = lazy(() => import("./pages/admin/Storage.jsx"));
 const Athletes      = lazy(() => import("./pages/AthleteShowcase.jsx"));
 const AthleteNew    = lazy(() => import("./pages/AthleteSubmit.jsx"));
 const Athlete       = lazy(() => import("./pages/AthletePage.jsx"));
@@ -63,6 +64,7 @@ export default function App() {
                     <Route path="atletas" element={<AdminAthletes />} />
                     <Route path="modalidades" element={<Modalities />} />
                     <Route path="turmas" element={<AdminClasses />} />
+                    <Route path="armazenamento" element={<StoragePage />} />
                     <Route path="sistema" element={<SystemPage />} />
                   </Route>
 

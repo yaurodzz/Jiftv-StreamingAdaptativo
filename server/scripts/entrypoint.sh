@@ -10,9 +10,21 @@ for q in $QUALIDADES; do
 done
 
 mkdir -p /etc/nginx/jiftv /var/www/hls /var/www/dash /var/www/thumbs \
-         /recordings/em_andamento /recordings/videos /recordings/logs
-chown www-data:www-data /var/www/hls /var/www/dash /var/www/thumbs
+         /recordings/em_andamento /recordings/videos /recordings/logs /var/jiftv
+chown www-data:www-data /var/www/hls /var/www/dash /var/www/thumbs /var/jiftv
 chown -R www-data:www-data /recordings 2>/dev/null || true
+
+# Pasta local das gravações: /var/jiftv/atual é um atalho trocado pelo worker quando a pasta
+# é escolhida em Painel > Armazenamento. Sem atalho (primeira vez) ou com a pasta escolhida
+# fora do ar (disco desconectado, PASTAS_DO_PC alterado), grava na pasta padrão.
+ATUAL=/var/jiftv/atual
+if [ ! -L "$ATUAL" ] || [ ! -d "$ATUAL/" ]; then
+    [ -L "$ATUAL" ] && echo "[jiftv] AVISO: a pasta local escolhida ($(readlink "$ATUAL")) não está disponível; usando a pasta padrão" >&2
+    ln -sfn /recordings "$ATUAL"
+fi
+mkdir -p "$ATUAL/em_andamento" "$ATUAL/videos"
+chown www-data:www-data "$ATUAL/em_andamento" "$ATUAL/videos" 2>/dev/null || true
+echo "[jiftv] Pasta local das gravações: $(readlink -f "$ATUAL")"
 
 # Logs grandes demais são girados (mantém uma cópia .1)
 for f in /recordings/logs/*.log; do
@@ -39,7 +51,7 @@ chmod 640 /opt/jiftv/jiftv.env
 echo "[jiftv] Qualidades: $QUALIDADES"
 
 # Gravações interrompidas (queda do container durante uma transmissão)
-for f in /recordings/em_andamento/*.flv; do
+for f in "$ATUAL"/em_andamento/*.flv; do
     [ -e "$f" ] || continue
     echo "[jiftv] recuperando gravação interrompida: $f"
     runuser -u www-data -- /opt/jiftv/bin/on_record_done.sh "$f" &

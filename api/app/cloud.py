@@ -17,7 +17,7 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.utils
 
-from . import config, estado, fb
+from . import armazenamento, config, estado, fb
 
 CHUNK = 20 * 1024 * 1024
 # Erros em que tentar de novo sozinho não adianta (limite do plano, credenciais)
@@ -28,6 +28,11 @@ _acordar = threading.Event()
 
 def configurado():
     return bool(config.CLOUDINARY_URL)
+
+
+def ativo():
+    """Credenciais no .env e destino ligado no painel (Armazenamento)."""
+    return configurado() and armazenamento.cloudinary_ligado()
 
 
 def nome_da_conta():
@@ -134,6 +139,8 @@ def enviar(vid, v):
     except OSError:
         pass
     fb.evento("cloudinary_ok", f"Enviado ao Cloudinary: {v.get('title')}")
+    from . import recordings  # importado aqui: recordings importa este módulo
+    recordings.acordar()      # com a pasta local desligada, a cópia do computador já pode sair
 
 
 def excluir(public_id):
@@ -147,18 +154,19 @@ def excluir(public_id):
     return None
 
 
-def _ajustar_status_inicial():
-    """Ao iniciar: envios interrompidos voltam para a fila; liga/desliga conforme o .env."""
+def ajustar_status():
+    """Ao iniciar e a cada mudança no painel: envios interrompidos voltam para a fila;
+    liga/desliga conforme o .env e a chave do painel."""
     for vid, v in estado.copia_vods().items():
         status = (v.get("cloudinary") or {}).get("status")
         if not v.get("localFile"):
             continue
         novo = None
-        if status == "uploading":
+        if status == "uploading" and vid not in _processadas:
             novo = "pending"
-        elif status == "disabled" and configurado():
+        elif status == "disabled" and ativo() and v.get("localAvailable"):
             novo = "pending"
-        elif status == "pending" and not configurado():
+        elif status == "pending" and not ativo():
             novo = "disabled"
         if novo:
             fb.db().collection("vods").document(vid).update({"cloudinary.status": novo})
@@ -166,10 +174,10 @@ def _ajustar_status_inicial():
 
 def loop():
     estado.ao_mudar("vods", _acordar.set)  # "Reenviar" no painel age na hora
-    _ajustar_status_inicial()
+    ajustar_status()
     while True:
         try:
-            if configurado():
+            if ativo() and not armazenamento.movendo():
                 vid, v = _proxima()
                 if vid:
                     _processadas[vid] = time.time()

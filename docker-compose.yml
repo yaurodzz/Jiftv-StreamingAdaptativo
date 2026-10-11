@@ -16,8 +16,12 @@ services:
       - "${RTMP_PORT:-1935}:1935"   # OBS / DroidCam
       - "${HTTP_PORT:-8080}:80"     # HLS, DASH, miniaturas e gravações
     volumes:
-      # Pasta local com as gravações completas (backup independente do Cloudinary)
+      # Pasta padrão das gravações (também guarda logs e fotos de atletas)
       - ${RECORDINGS_DIR:-./gravacoes}:/recordings
+      # Pastas do computador que o painel pode escolher para as gravações (Painel > Armazenamento)
+      - ${PASTAS_DO_PC:-${RECORDINGS_DIR:-./gravacoes}}:/pc
+      # Estado compartilhado com o worker: atalho para a pasta local escolhida
+      - jiftv-estado:/var/jiftv
     tmpfs:
       # Segmentos HLS/DASH e miniaturas ao vivo são temporários: ficam na memória
       - /var/www/hls:mode=1777
@@ -26,7 +30,7 @@ services:
 
   # Worker (Python): liga o servidor de mídia ao Firebase.
   # Valida as chaves do OBS, marca transmissões ao vivo, registra as gravações no
-  # Firestore, envia ao Cloudinary e executa os pedidos do painel.
+  # Firestore, envia ao Google Drive e ao Cloudinary e executa os pedidos do painel.
   # Só faz conexões de saída para o Firebase: funciona atrás do roteador da escola.
   api:
     build: ./api
@@ -41,8 +45,14 @@ services:
       TZ: ${TZ:-America/Sao_Paulo}
       MEDIA_INTERNAL_URL: http://media:8081
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-service-account.json
+      # Só para o painel mostrar o caminho como ele é no computador
+      RECORDINGS_DIR: ${RECORDINGS_DIR:-./gravacoes}
+      PASTAS_DO_PC: ${PASTAS_DO_PC:-${RECORDINGS_DIR:-./gravacoes}}
     volumes:
       - ${RECORDINGS_DIR:-./gravacoes}:/recordings
+      - ${PASTAS_DO_PC:-${RECORDINGS_DIR:-./gravacoes}}:/pc
+      # Configuração do armazenamento, autorização do Google Drive e atalho da pasta local
+      - jiftv-estado:/var/jiftv
       - ./secrets:/secrets:ro
 
   # Emuladores do Firebase para desenvolvimento (docker compose --profile dev up)
@@ -96,3 +106,4 @@ services:
 
 volumes:
   jiftv-emuladores:
+  jiftv-estado:

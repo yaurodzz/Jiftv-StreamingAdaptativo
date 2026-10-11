@@ -23,9 +23,21 @@ def _bool(nome, padrao):
     return valor not in ("0", "false", "nao", "não", "no", "off")
 
 
-RECORDINGS = Path("/recordings")
-VIDEOS = RECORDINGS / "videos"
+# Pasta padrão das gravações (RECORDINGS_DIR do .env): também guarda logs e fotos de atletas.
+RECORDINGS = Path(_env("JIFTV_RECORDINGS", "/recordings"))
 LOGS = RECORDINGS / "logs"
+# Volume compartilhado com o servidor de mídia: configuração do armazenamento, autorização do
+# Google Drive e o atalho "atual", que aponta para a pasta local escolhida no painel.
+ESTADO = Path(_env("JIFTV_ESTADO", "/var/jiftv"))
+PASTA_ATUAL = ESTADO / "atual"
+# Raiz das pastas do computador que o painel pode escolher (PASTAS_DO_PC do .env, montada em /pc).
+PASTAS = Path(_env("JIFTV_PASTAS", "/pc"))
+# Caminhos no computador, só para mostrar no painel (dentro do container eles são /recordings e /pc).
+RECORDINGS_NO_PC = _env("RECORDINGS_DIR", "./gravacoes")
+PASTAS_NO_PC = _env("PASTAS_DO_PC") or RECORDINGS_NO_PC
+# O nginx grava e entrega os vídeos por este caminho, que segue o atalho "atual".
+EM_ANDAMENTO = PASTA_ATUAL / "em_andamento"
+VIDEOS = PASTA_ATUAL / "videos"
 
 # Servidor interno do nginx (estatísticas e controle do RTMP)
 MEDIA_URL = _env("MEDIA_INTERNAL_URL", "http://media:8081").rstrip("/")
@@ -39,6 +51,13 @@ EMULADOR = bool(_env("FIRESTORE_EMULATOR_HOST"))
 CLOUDINARY_URL = _env("CLOUDINARY_URL")
 CLOUDINARY_FOLDER = _env("CLOUDINARY_FOLDER", "jiftv").strip("/")
 RETRY_INTERVAL_MIN = max(0, _int("RETRY_INTERVAL_MIN", 15))
+
+# Google Drive (docs/armazenamento.md): cliente OAuth criado no Google Cloud. A autorização da conta
+# é feita pelo painel e fica guardada no volume de estado, não no .env.
+DRIVE_CLIENT_ID = _env("GOOGLE_OAUTH_CLIENT_ID")
+DRIVE_CLIENT_SECRET = _env("GOOGLE_OAUTH_CLIENT_SECRET")
+# Endereço público do worker, usado no retorno da autorização (precisa estar cadastrado no cliente OAuth).
+API_PUBLICA = (_env("API_PUBLIC_URL") or "https://api.jiftv.org").rstrip("/")
 
 # API do site institucional (feito pelo professor): fornece a foto de cada aluno pela matrícula.
 # Veja docs/integracao-site-institucional.md. Vazio = cadastro de atleta com upload de foto.

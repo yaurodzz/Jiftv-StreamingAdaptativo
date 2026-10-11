@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ClipboardList, CloudUpload, Download, ExternalLink, Eye, EyeOff, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import { deleteVod, retryUpload, setVodVisible, subscribeAllVods, updateVod } from "../../services/vods.js";
+import { ClipboardList, CloudUpload, Download, ExternalLink, Eye, EyeOff, Pencil, RefreshCw, Trash2, HardDriveUpload } from "lucide-react";
+import { deleteVod, retryDrive, retryUpload, setVodVisible, subscribeAllVods, updateVod } from "../../services/vods.js";
 import { subscribeModalities } from "../../services/modalities.js";
 import { resyncRecordings } from "../../services/system.js";
 import { currentIdToken } from "../../providers/AuthProvider.jsx";
 import { useToast } from "../../features/admin/ToastProvider.jsx";
 import { useServer } from "../../features/admin/useServer.js";
-import { CloudBadge } from "../../features/admin/badges.jsx";
+import { CloudBadge, DriveBadge } from "../../features/admin/badges.jsx";
 import FormDialog from "../../features/admin/FormDialog.jsx";
 import SearchBox from "../../features/catalog/SearchBox.jsx";
 import { formatBytes, formatDateTime, formatTime, vodDuration } from "../../lib/format.js";
-import { recordingUrl, vodThumb } from "../../lib/media.js";
+import { inDrive, recordingUrl, vodThumb } from "../../lib/media.js";
 
 export default function Recordings() {
   const toast = useToast();
@@ -30,7 +30,9 @@ export default function Recordings() {
   // Miniaturas e downloads de gravações ocultas exigem o ID token no servidor de mídia.
   useEffect(() => { currentIdToken().then(setToken); }, []);
 
-  const cloudOn = Boolean(server?.cloudinary?.configured);
+  // `storage` vem de Painel > Armazenamento; workers antigos só publicam cloudinary.configured.
+  const cloudOn = Boolean(server?.storage ? server.storage.cloudinary : server?.cloudinary?.configured);
+  const driveOn = Boolean(server?.storage?.drive);
 
   const filtered = useMemo(() => {
     const nq = q.trim().toLowerCase();
@@ -93,7 +95,8 @@ export default function Recordings() {
 
       <p className="text-xs text-muted">
         {vods ? `${filtered.length} de ${vods.length} gravações · ${formatBytes(totalBytes)} na pasta local` : "…"}
-        {!cloudOn && server !== undefined && " · Cloudinary desligado (só pasta local)"}
+        {server?.storage && ` · destinos ligados: ${[server.storage.local && "pasta local", driveOn && "Google Drive", cloudOn && "Cloudinary"].filter(Boolean).join(", ") || "nenhum"}`}
+        {!server?.storage && !cloudOn && server !== undefined && " · Cloudinary desligado (só pasta local)"}
       </p>
 
       {vods === null ? (
@@ -117,14 +120,23 @@ export default function Recordings() {
                     <Link to={`/partidas/${v.id}`} className="truncate font-medium hover:text-accent">{v.title || "Sem título"}</Link>
                     {!v.visible && <span className="badge bg-warn/10 text-warn"><EyeOff size={11} /> Oculta</span>}
                     <CloudBadge vod={v} />
+                    <DriveBadge vod={v} />
                   </div>
                   <p className="mt-0.5 text-xs text-muted">
                     {v.modalityCode && <code className="mr-1 rounded bg-elevated px-1.5 py-0.5 font-mono">{v.modalityCode}</code>}
                     {[formatDateTime(v.recordedAt), vodDuration(v), v.height && `${v.height}p`, formatBytes(v.bytes), `${v.views || 0} visualizações`].filter(Boolean).join(" · ")}
                   </p>
                   {v.localFile && <p className="mt-0.5 truncate font-mono text-[11px] text-muted">{v.localFile}</p>}
-                  {!local && v.localFile && (
-                    <p className="mt-1 text-xs text-warn">Arquivo local não encontrado{v.playbackUrl ? " · tocando do Cloudinary" : ""}.</p>
+                  {!local && v.localFile && (v.localRemovedAt ? (
+                    <p className="mt-1 text-xs text-muted">Cópia do computador apagada para liberar disco · tocando do {v.playbackUrl ? "Cloudinary" : "Google Drive"}.</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-warn">Arquivo local não encontrado{v.playbackUrl ? " · tocando do Cloudinary" : inDrive(v) ? " · tocando do Google Drive" : ""}.</p>
+                  ))}
+                  {v.drive?.status === "failed" && (
+                    <p className="mt-1 text-xs text-live">
+                      Google Drive: {v.drive.error}
+                      {v.drive.nextAttemptAt && ` · nova tentativa às ${formatTime(v.drive.nextAttemptAt)}`}
+                    </p>
                   )}
                   {status === "failed" && (
                     <p className="mt-1 text-xs text-live">
@@ -145,6 +157,15 @@ export default function Recordings() {
                             onClick={() => run(() => retryUpload(v.id), "Gravação colocada na fila do Cloudinary")}>
                       <CloudUpload size={17} />
                     </button>
+                  )}
+                  {driveOn && local && v.drive?.status !== "uploading" && v.drive?.status !== "pending" && (
+                    <button type="button" className="icon-btn" title={inDrive(v) ? "Enviar de novo ao Google Drive" : "Enviar ao Google Drive agora"} aria-label={inDrive(v) ? "Enviar de novo ao Google Drive" : "Enviar ao Google Drive agora"}
+                            onClick={() => run(() => retryDrive(v.id), "Gravação colocada na fila do Google Drive")}>
+                      <HardDriveUpload size={17} />
+                    </button>
+                  )}
+                  {v.drive?.webViewLink && (
+                    <a className="icon-btn" href={v.drive.webViewLink} target="_blank" rel="noopener noreferrer" title="Abrir no Google Drive" aria-label="Abrir no Google Drive"><ExternalLink size={16} /></a>
                   )}
                   {v.cloudinary?.secureUrl && (
                     <a className="icon-btn" href={v.cloudinary.secureUrl} target="_blank" rel="noopener noreferrer" title="Abrir no Cloudinary" aria-label="Abrir no Cloudinary"><ExternalLink size={16} /></a>
@@ -223,15 +244,18 @@ function EditVodDialog({ vod, onClose }) {
 function DeleteVodDialog({ vod, mediaOnline, onClose }) {
   const toast = useToast();
   const [alsoCloud, setAlsoCloud] = useState(false);
+  const [alsoDrive, setAlsoDrive] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setAlsoCloud(false); }, [vod]);
+  useEffect(() => { setAlsoCloud(false); setAlsoDrive(false); }, [vod]);
 
   const onCloud = Boolean(vod?.cloudinary?.publicId);
+  const onDrive = Boolean(vod?.drive?.fileId);
+  const local = vod?.localFile && vod?.localAvailable !== false;
 
   const confirm = async () => {
     setBusy(true);
     try {
-      const r = await deleteVod(vod.id, { cloudinary: alsoCloud });
+      const r = await deleteVod(vod.id, { cloudinary: alsoCloud, drive: alsoDrive });
       toast.success(r?.aviso ? `Gravação excluída. ${r.aviso}` : "Gravação excluída");
       onClose();
     } catch (err) {
@@ -245,9 +269,19 @@ function DeleteVodDialog({ vod, mediaOnline, onClose }) {
     <FormDialog open={Boolean(vod)} title="Excluir gravação?" submitLabel={busy ? "Excluindo…" : "Excluir"}
                 submitting={busy} submitDisabled={!mediaOnline} danger onClose={onClose} onSubmit={confirm}>
       <p className="text-sm text-muted">
-        O arquivo <code className="break-all font-mono text-xs text-fg">{vod?.localFile || vod?.id}</code> ({formatBytes(vod?.bytes)}) será apagado
-        da pasta local e sai do catálogo. Esta ação não pode ser desfeita.
+        {local ? (
+          <>O arquivo <code className="break-all font-mono text-xs text-fg">{vod?.localFile || vod?.id}</code> ({formatBytes(vod?.bytes)}) será apagado
+          da pasta local e sai do catálogo. Esta ação não pode ser desfeita.</>
+        ) : (
+          <>A gravação <code className="break-all font-mono text-xs text-fg">{vod?.localFile || vod?.id}</code> sai do catálogo. Esta ação não pode ser desfeita.</>
+        )}
       </p>
+      {onDrive && (
+        <label className="mt-4 flex items-center gap-3 text-sm max-md:min-h-11">
+          <input type="checkbox" checked={alsoDrive} onChange={(e) => setAlsoDrive(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--live))]" />
+          Mandar também a cópia do Google Drive para a lixeira
+        </label>
+      )}
       {onCloud && (
         <label className="mt-4 flex items-center gap-3 text-sm max-md:min-h-11">
           <input type="checkbox" checked={alsoCloud} onChange={(e) => setAlsoCloud(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--live))]" />

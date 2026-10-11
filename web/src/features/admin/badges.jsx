@@ -38,6 +38,27 @@ const CLOUD = {
   disabled:  { label: "Só local",      cls: "border border-line text-muted", icon: HardDrive },
 };
 
+const DRIVE = {
+  uploaded:  { label: "No Drive",          cls: "bg-accent/10 text-accent", icon: Cloud },
+  uploading: { label: "Enviando ao Drive", cls: "bg-elevated text-fg",      icon: Loader2, spin: true },
+  pending:   { label: "Fila do Drive",     cls: "bg-elevated text-muted",   icon: Clock },
+  failed:    { label: "Drive falhou",      cls: "bg-live/10 text-live",     icon: AlertTriangle },
+};
+
+// Situação no Google Drive. Sem selo quando o Drive está desligado para a gravação.
+export function DriveBadge({ vod }) {
+  const info = DRIVE[vod.drive?.status];
+  if (!info) return null;
+  const Icon = info.icon;
+  const pct = vod.drive.status === "uploading" && vod.drive.progress ? ` ${vod.drive.progress}%` : "";
+  return (
+    <span className={`badge ${info.cls}`} title={vod.drive.error || undefined}>
+      <Icon size={12} className={info.spin ? "animate-spin" : undefined} />
+      {info.label}{pct}
+    </span>
+  );
+}
+
 export function CloudBadge({ vod }) {
   const status = vod.cloudinary?.status || (vod.playbackUrl ? "uploaded" : "disabled");
   const info = CLOUD[status] || CLOUD.pending;

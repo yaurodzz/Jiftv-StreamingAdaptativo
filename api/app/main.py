@@ -10,8 +10,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import cloud, comandos, config, estado, fb, live, recordings, sistema
+from . import armazenamento, cloud, comandos, config, drive, estado, fb, live, recordings, sistema
 from .atletas import router as atletas
+from .rotas_armazenamento import router as rotas_armazenamento
 from .routes import interno, publico
 
 
@@ -34,6 +35,7 @@ def _conectar():
         (live.loop, "ao-vivo"),              # status das transmissões x nginx-rtmp
         (recordings.loop, "acervo"),         # pasta de gravações -> coleção vods
         (cloud.loop, "cloudinary"),          # fila de envio ao Cloudinary
+        (drive.loop, "drive"),               # fila de envio ao Google Drive
         (comandos.loop, "comandos"),         # pedidos do painel
         (sistema.loop, "sistema"),           # estado do servidor para o painel
     ):
@@ -43,6 +45,8 @@ def _conectar():
 
 @asynccontextmanager
 async def lifespan(_app):
+    armazenamento.preparar()  # atalho da pasta local, antes de qualquer varredura
+
     def iniciar():
         try:
             _conectar()
@@ -57,7 +61,8 @@ async def lifespan(_app):
 app = FastAPI(title="JIFTv worker", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 # O site (Firebase Hosting, jiftv.org) chama /api/* de outro domínio: só as origens de CORS_ORIGINS
-app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGENS, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGENS, allow_methods=["GET", "POST", "PUT"],
+                   allow_headers=["Content-Type", "Authorization"])
 
 NOMES_CAMPOS = {
     "name": "nome", "nickname": "apelido", "birthDate": "data de nascimento", "photoUrl": "foto",
@@ -77,3 +82,4 @@ async def dados_invalidos(_request: Request, exc: RequestValidationError):
 app.include_router(interno)
 app.include_router(publico)
 app.include_router(atletas)
+app.include_router(rotas_armazenamento)

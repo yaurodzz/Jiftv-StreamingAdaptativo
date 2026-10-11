@@ -212,6 +212,7 @@ botões 40–42px, chip 34px, respiros e rodapé iguais).
 | `/atletas/novo` (modo upload, sem enviar) | sim | modo matrícula e tela de sucesso |
 | `/admin/login` | sim | |
 | `/admin/*` (as sete seções e o detalhe de uma transmissão) e `/scout/:vodId`, logado, com dados reais | sim, sem rolagem horizontal e sem toque abaixo de 44px | diálogos, ações que gravam, lista de atletas com cadastros |
+| `/admin/armazenamento` (aba nova, 2026-10-11), logado, nos emuladores | sim em 375px: sem rolagem horizontal, chaves liga/desliga com 44px de toque | seletor de pasta e confirmações só no desktop |
 | Desktop 1280px: `/catalogo`, `/atletas/novo` e `/live` com transmissão | sim (medidas e controles iguais aos de antes) | demais telas |
 | Notch e barra de gestos, zoom do iOS, teclados | | sim (o navegador de teste não simula) |
 

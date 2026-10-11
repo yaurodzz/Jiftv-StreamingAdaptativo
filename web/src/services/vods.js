@@ -7,7 +7,8 @@ import { sendCommand } from "./commands.js";
 // Acesso à coleção `vods` (gravações). ID determinístico AAAAMMDD-COD-HHMMSS.
 // Campos: title, description, modality, modalityCode, recordedAt, durationSec, width, height,
 // bytes, localFile, localThumb, localAvailable, visible, views, playbackUrl, thumbnailUrl,
-// cloudinary { status, error, ... }, sourceStreamId, streamSlug.
+// cloudinary { status, error, ... }, drive { status, fileId, progress, error, ... },
+// localRemovedAt (cópia local apagada de propósito: pasta local desligada), sourceStreamId, streamSlug.
 //
 // As regras só liberam ao público gravações com visible == true, então a consulta
 // pública PRECISA filtrar por visible (índice composto em firestore.indexes.json).
@@ -56,7 +57,18 @@ export function retryUpload(id) {
   });
 }
 
+// Mesma ideia para a fila do Google Drive.
+export function retryDrive(id) {
+  return updateDoc(doc(db, "vods", id), {
+    "drive.status": "pending",
+    "drive.error": null,
+    "drive.attempts": 0,
+    "drive.nextAttemptAt": null,
+  });
+}
+
 // Apagar o arquivo exige o servidor local: vira um pedido para o worker.
-export function deleteVod(id, { cloudinary = false } = {}) {
-  return sendCommand("delete_vod", { vodId: id, cloudinary }, { timeoutMs: 120000 });
+// No Drive, "excluir" manda para a lixeira do Drive (recuperável por 30 dias).
+export function deleteVod(id, { cloudinary = false, drive = false } = {}) {
+  return sendCommand("delete_vod", { vodId: id, cloudinary, drive }, { timeoutMs: 120000 });
 }

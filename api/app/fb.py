@@ -82,7 +82,9 @@ def limpar_eventos(manter=300):
 def verificar_admin(token):
     """Valida um ID token do Firebase Auth e confere o custom claim { admin: true }."""
     try:
-        dados = auth.verify_id_token(token)
+        # Tolera o relógio do servidor atrasado em até 60 s (o máximo que o SDK aceita): sem isso, um
+        # token recém-emitido é recusado como "usado cedo demais" e o painel recebe 401 logo após o login.
+        dados = auth.verify_id_token(token, clock_skew_seconds=60)
     except Exception:  # noqa: BLE001 - token inválido, expirado ou de outro projeto
         return False
     return bool(dados.get("admin"))

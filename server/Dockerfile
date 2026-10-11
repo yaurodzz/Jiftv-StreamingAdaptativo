@@ -12,6 +12,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && rm -f /etc/nginx/sites-enabled/default
 
+# Volume de estado compartilhado com o worker (atalho da pasta local escolhida no painel)
+RUN mkdir -p /var/jiftv && chown www-data:www-data /var/jiftv
+
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY scripts/ /opt/jiftv/bin/
 

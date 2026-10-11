@@ -24,10 +24,21 @@ export function recordingUrl(rel, token) {
   return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 }
 
-// Endereço de reprodução de uma gravação: Cloudinary quando enviada, senão o servidor local.
+// Vídeo guardado no Google Drive: o worker busca o arquivo no Drive e repassa ao player
+// (o Drive não entrega vídeo direto). Gravações ocultas exigem o ID token do admin.
+export const inDrive = (vod) => vod?.drive?.status === "uploaded" && Boolean(vod.drive.fileId);
+
+export function driveUrl(vod, token) {
+  const url = `${env.apiUrl}/api/video/${encodeURIComponent(vod.id)}`;
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+}
+
+// Endereço de reprodução de uma gravação: Cloudinary quando enviada, senão a pasta local do
+// servidor e, por último, a cópia do Google Drive (quando a local foi apagada para liberar disco).
 export function vodSource(vod, token) {
   if (vod?.playbackUrl) return vod.playbackUrl;
   if (vod?.localFile && vod?.localAvailable !== false) return recordingUrl(vod.localFile, vod.visible ? null : token);
+  if (inDrive(vod)) return driveUrl(vod, vod.visible ? null : token);
   return null;
 }
 
@@ -46,7 +57,7 @@ export function athletePhoto(athlete, size = 400) {
 }
 
 export function isPlayable(vod) {
-  return Boolean(vod?.playbackUrl || (vod?.localFile && vod?.localAvailable !== false));
+  return Boolean(vod?.playbackUrl || (vod?.localFile && vod?.localAvailable !== false) || inDrive(vod));
 }
 
 export const audienceUrl = () => `${env.apiUrl}/api/audiencia`;

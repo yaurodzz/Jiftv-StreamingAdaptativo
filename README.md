@@ -40,6 +40,7 @@ firebase.json, .firebaserc       Hosting (web/dist), regras e índices do Firest
 firestore.rules                  quem pode ler/escrever o quê (visitante, admin)
 firestore.indexes.json           índices do catálogo, da vitrine de atletas e da linha do tempo do scout
 docs/cloudinary-preset.md        preset do Cloudinary (fotos de atletas por upload)
+docs/armazenamento.md            onde as gravações ficam: pasta local, Google Drive, Cloudinary (aba Armazenamento)
 docs/integracao-site-institucional.md   fotos dos atletas pela matrícula, na API do site do professor
 docs/dominio-cloudflare.md       domínio jiftv.org, túnel da Cloudflare, Firebase Hosting, CORS
 tools/mock_institucional.py      API de mentira do site institucional (só desenvolvimento)
@@ -137,11 +138,16 @@ O nginx grava o sinal original do OBS durante toda a transmissão num único arq
 1. o `.flv` vira `.mp4` sem recodificar (sem perda de qualidade, leva segundos);
 2. o vídeo **inteiro** é salvo em `gravacoes/videos/<nome>/<nome>_AAAA-MM-DD_HH-MM-SS.mp4`, junto com a
    miniatura (`.jpg`) e os metadados (`.info.json`);
-3. o worker cria o documento em `vods` (aparece no catálogo) e coloca o vídeo na fila do Cloudinary.
+3. o worker cria o documento em `vods` (aparece no catálogo) e coloca o vídeo na fila dos destinos ligados em
+   **Painel > Armazenamento**: Google Drive e/ou Cloudinary. Nessa aba cada destino (pasta local, Google Drive,
+   Cloudinary) tem uma chave liga/desliga, e a pasta local pode ser trocada. Com a pasta local desligada, o vídeo
+   é apagado do computador depois de confirmado na nuvem. Veja [docs/armazenamento.md](docs/armazenamento.md).
 
-**A cópia local nunca é apagada pelo envio.** Se o upload falhar (limite do plano gratuito de ~100 MB por vídeo,
-falta de internet, créditos), o motivo aparece no painel e há novas tentativas automáticas. O catálogo toca o
-vídeo do Cloudinary quando ele existe e, senão, do servidor local. Gravações ocultas no painel só abrem com o
+**Com a pasta local ligada (padrão), a cópia local nunca é apagada pelo envio.** Com ela desligada, a cópia só sai
+do computador depois que o vídeo está confirmado na nuvem. Se o upload falhar (limite do plano gratuito do
+Cloudinary de ~100 MB por vídeo, Drive sem espaço, falta de internet), o motivo aparece no painel, há novas
+tentativas automáticas e o vídeo continua no computador. O catálogo toca o vídeo do Cloudinary quando ele existe,
+senão do servidor local e, por último, do Google Drive (repassado pelo worker). Gravações ocultas no painel só abrem com o
 token do admin, tanto no Firestore (regras) quanto no servidor de mídia (`auth_request`).
 
 ## Atletas e scout

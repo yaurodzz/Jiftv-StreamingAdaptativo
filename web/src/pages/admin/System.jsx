@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { fetchLogs } from "../../services/system.js";
 import { usingEmulators } from "../../lib/firebase.js";
@@ -123,7 +124,8 @@ export default function SystemPage() {
             </div>
           )}
           <p className="mt-3 text-xs text-muted">
-            Os vídeos ficam em <code className="font-mono">gravacoes/videos/&lt;nome&gt;/</code> no servidor. Uma hora em 1080p a 6 Mbps ocupa cerca de 2,7 GB.
+            Uma hora em 1080p a 6 Mbps ocupa cerca de 2,7 GB. A pasta e os destinos das gravações (pasta local, Google Drive, Cloudinary)
+            são escolhidos em <Link to="/admin/armazenamento" className="text-accent hover:underline">Armazenamento</Link>.
           </p>
         </section>
 

@@ -7,7 +7,7 @@ import shutil
 import time
 import traceback
 
-from . import cloud, config, estado, fb, institucional, live, media
+from . import armazenamento, cloud, config, drive, estado, fb, institucional, live, media
 
 INTERVALO = 20
 _inicio = time.time()
@@ -15,7 +15,7 @@ _inicio = time.time()
 
 def _disco():
     try:
-        uso = shutil.disk_usage(config.RECORDINGS)
+        uso = shutil.disk_usage(config.VIDEOS)  # disco da pasta local escolhida no painel
         return {"total": uso.total, "used": uso.used, "free": uso.free}
     except OSError:
         return None
@@ -42,9 +42,16 @@ def publicar():
         "recordings": {"count": len(locais), "bytes": sum(v.get("bytes") or 0 for v in locais)},
         "cloudinary": {
             "configured": cloud.configurado(),
+            "enabled": cloud.ativo(),
             "cloudName": cloud.nome_da_conta(),
             "folder": config.CLOUDINARY_FOLDER,
             "retryMin": config.RETRY_INTERVAL_MIN,
+        },
+        # Resumo de Painel > Armazenamento (os detalhes vêm de GET /api/armazenamento)
+        "storage": {
+            "local": armazenamento.local_ligado(),
+            "drive": drive.ativo(),
+            "cloudinary": cloud.ativo(),
         },
         "institutional": institucional.estado(),
         "publicRecordings": config.GRAVACOES_PUBLICAS,

@@ -12,6 +12,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ app/
 
+# Volume de estado (configuração do armazenamento, autorização do Google Drive, atalho da pasta local)
+RUN mkdir -p /var/jiftv && chown www-data:www-data /var/jiftv
+
 # Mesmo usuário (uid 33) que grava os vídeos no container de mídia
 USER www-data
 

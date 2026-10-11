@@ -13,8 +13,11 @@ if [ -r /opt/jiftv/jiftv.env ]; then
 fi
 
 REC_ROOT=/recordings
-REC_TMP=$REC_ROOT/em_andamento
-REC_VIDEOS=$REC_ROOT/videos
+# Pasta local escolhida em Painel > Armazenamento: "atual" é um atalho mantido pelo worker
+# (por padrão aponta para /recordings).
+REC_BASE=/var/jiftv/atual
+REC_TMP=$REC_BASE/em_andamento
+REC_VIDEOS=$REC_BASE/videos
 LOG_DIR=$REC_ROOT/logs
 LOG_FILE=$LOG_DIR/jiftv.log
 

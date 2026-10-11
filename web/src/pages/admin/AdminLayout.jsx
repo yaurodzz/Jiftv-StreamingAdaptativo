@@ -15,6 +15,7 @@ const TABS = [
   { to: "/admin", label: "Visão geral", end: true },
   { to: "/admin/transmissoes", label: "Transmissões" },
   { to: "/admin/gravacoes", label: "Gravações" },
+  { to: "/admin/armazenamento", label: "Armazenamento" },
   { to: "/admin/atletas", label: "Atletas" },
   { to: "/admin/modalidades", label: "Modalidades" },
   { to: "/admin/turmas", label: "Turmas" },
