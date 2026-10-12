@@ -67,7 +67,7 @@ app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGENS, allow_meth
                    allow_headers=["Content-Type", "Authorization"])
 
 NOMES_CAMPOS = {
-    "name": "nome", "nickname": "apelido", "birthDate": "data de nascimento", "photoUrl": "foto",
+    "name": "nome", "nickname": "apelido", "birthDate": "data de nascimento",
     "jerseyNumber": "número", "position": "posição", "bio": "bio", "modalityCode": "modalidade",
     "classId": "turma", "matricula": "matrícula", "submittedByName": "seu nome", "submittedByEmail": "seu e-mail",
 }

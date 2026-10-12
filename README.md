@@ -109,8 +109,6 @@ Os dados dos emuladores ficam no volume `jiftv-emuladores` (exportados ao parar 
    - Configuração Web do Firebase (`VITE_FIREBASE_*`). Os endereços de produção (`VITE_MEDIA_URL=https://live.jiftv.org`,
      `VITE_API_URL=https://api.jiftv.org`) já estão em `web/.env.production`; defina também
      `VITE_RTMP_URL=rtmp://<IP ou domínio da escola>:1935/live`.
-   - Só se o cadastro de atletas for por **upload** de foto: `VITE_CLOUDINARY_CLOUD_NAME` e o preset
-     `athletes_profile` ([docs/cloudinary-preset.md](docs/cloudinary-preset.md)). Pela matrícula não precisa.
    - O site é publicado em `jiftv.org` (domínio personalizado do Firebase Hosting; veja
      [docs/dominio-cloudflare.md](docs/dominio-cloudflare.md)). O worker só aceita chamadas desse site
      (`CORS_ORIGINS`).
@@ -157,16 +155,15 @@ token do admin, tanto no Firestore (regras) quanto no servidor de mídia (`auth_
 - **Cadastro público** (`/atletas/novo`): qualquer pessoa envia o perfil de um atleta. Os dados vão para o
   worker (`POST /api/atletas`), que valida os campos, limita os envios por IP e grava sempre com
   `status: "pending"`. Como passa pelo servidor da escola, o formulário só funciona com ele ligado.
-  A **foto** vem de uma de duas origens (`ATLETAS_PHOTO_SOURCE`):
-  - **pela matrícula escolar** (padrão quando `INSTITUCIONAL_API_URL` está definida): a pessoa informa a
-    matrícula e o worker busca a foto na **API do site institucional** (feito pelo professor). A foto não passa
-    pelo navegador, e a matrícula fica num documento privado (`athletePrivate`), nunca no perfil público.
-    Guia, contrato assumido e perguntas para o professor: [docs/integracao-site-institucional.md](docs/integracao-site-institucional.md);
-  - **por upload**: a pessoa envia a foto direto ao Cloudinary (preset *unsigned* `athletes_profile`,
-    [docs/cloudinary-preset.md](docs/cloudinary-preset.md)).
-- **Moderação** (Painel → Atletas): aprovar, corrigir dados, rejeitar com motivo (fica registrado) ou remover
-  spam. O selo da aba mostra quantos cadastros esperam aprovação. Nos cadastros por matrícula, o painel mostra a
-  matrícula e avisa quando o nome digitado não bate com o do cadastro institucional.
+  O formulário **não envia foto**: pede a **matrícula escolar** (obrigatória) e o worker busca a foto na
+  **API do site institucional** (feito pelo professor). A matrícula fica num documento privado
+  (`athletePrivate`), nunca no perfil público. Se a busca não trouxer foto (API fora do ar ou não configurada,
+  matrícula desconhecida, aluno sem foto), o cadastro entra sem foto e o admin resolve no painel.
+  Guia, contrato assumido e perguntas para o professor: [docs/integracao-site-institucional.md](docs/integracao-site-institucional.md).
+- **Moderação** (Painel → Atletas): aprovar, rejeitar com motivo (fica registrado) ou remover spam. O selo da
+  aba mostra quantos cadastros esperam aprovação. O painel mostra a matrícula, avisa quando o nome digitado não
+  bate com o do cadastro institucional e marca "Sem foto" com o motivo. Em **Editar** o admin corrige os dados
+  e a matrícula, **envia ou troca a foto** (JPEG, PNG ou WebP, até 5 MB) e pode buscar de novo a foto pela matrícula.
 - **Turmas** (Painel → Turmas): as opções do formulário de cadastro.
 - **Tipos de scout** (Painel → Modalidades → Scout): o vocabulário de cada esporte (ex.: `gol`, `assistencia`,
   `falta`), com peso para futuras médias.

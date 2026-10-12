@@ -1,7 +1,7 @@
 """Cliente da API do site institucional: foto do aluno pela matrícula escolar.
 
-O site institucional (feito pelo professor) já tem as fotos de todos os alunos. Em vez de a pessoa
-enviar uma foto no cadastro de atleta, ela informa a matrícula e o worker busca a foto lá.
+O site institucional (feito pelo professor) já tem as fotos de todos os alunos. No cadastro de atleta a
+pessoa informa a matrícula e o worker busca a foto lá (se não der certo, o admin envia uma pelo painel).
 
 O contrato exato da API ainda precisa ser confirmado (veja docs/integracao-site-institucional.md).
 Por isso o formato é configurável e dois tipos de resposta são aceitos:
@@ -206,7 +206,6 @@ def estado():
     return {
         "configured": configurada(),
         "host": _host(config.INSTITUCIONAL_URL) or None,
-        "mode": config.ATLETAS_FOTO,
         "lastAt": ultimo["quando"],
         "lastOk": ultimo["ok"],
         "lastError": ultimo["erro"],

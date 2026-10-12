@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  approveAthlete, deleteAthlete, rejectAthlete, subscribeAthletePrivate, subscribeAthletesAdmin, updateAthlete,
+  approveAthlete, deleteAthlete, fetchInstitutionalPhoto, rejectAthlete, setAthleteMatricula, subscribeAthletePrivate,
+  subscribeAthletesAdmin, updateAthlete, uploadAthletePhoto, validatePhotoFile,
 } from "../../services/athletes.js";
 import { athletePhoto } from "../../lib/media.js";
 import { computeAge, classLine } from "../athletes/format.js";
@@ -12,6 +13,8 @@ import ConfirmDialog from "./ConfirmDialog.jsx";
 // - Aprovar: um clique (ação positiva, low-risk).
 // - Rejeitar: abre diálogo com campo opcional "motivo" (fica no doc pra auditoria).
 // - Remover (só para spam óbvio): confirmação separada.
+// - Editar: corrige os dados, a matrícula e a foto. O cadastro público não envia foto: ela vem do
+//   site institucional pela matrícula e, quando isso não dá certo, o admin envia uma por aqui.
 
 const TABS = [
   { key: "pending",  label: "Pendentes" },
@@ -26,7 +29,7 @@ export default function AthletesModerationPanel({ onPendingCount }) {
   const [reject, setReject] = useState(null); // { athlete, reason }
   const [remove, setRemove] = useState(null); // athlete
   const [editing, setEditing] = useState(null); // athlete
-  const [priv, setPriv] = useState({}); // { idDoAtleta: { matricula, institutionalName } } (só admin lê)
+  const [priv, setPriv] = useState({}); // { idDoAtleta: { matricula, institutionalName, photoStatus } } (só admin lê)
 
   useEffect(() => subscribeAthletePrivate(setPriv, () => setPriv({})), []);
 
@@ -146,36 +149,108 @@ export default function AthletesModerationPanel({ onPendingCount }) {
         onCancel={() => setRemove(null)}
       />
 
-      <EditAthleteDialog athlete={editing} onClose={() => setEditing(null)} />
+      {/* O atleta vem da lista ao vivo: a foto do diálogo muda assim que o servidor grava a nova */}
+      <EditAthleteDialog
+        athlete={editing && (list?.find((a) => a.id === editing.id) || editing)}
+        priv={editing ? priv[editing.id] : null}
+        onClose={() => setEditing(null)}
+      />
     </div>
   );
 }
 
-// Correção de dados antes de aprovar (erros de digitação, número da camisa…).
-function EditAthleteDialog({ athlete, onClose }) {
+// Por que o atleta está sem foto (athletePrivate.photoStatus, gravado pelo worker).
+const PHOTO_ISSUE = {
+  nao_configurada: "a busca pela matrícula não está configurada no servidor",
+  nao_encontrada: "matrícula não encontrada no cadastro da instituição",
+  sem_foto: "o cadastro da instituição não tem foto",
+  erro: "a consulta ao site da instituição falhou",
+};
+
+const MATRICULA = /^[0-9A-Za-z]{4,20}$/;
+
+function photoIssue(athlete, priv) {
+  if (athletePhoto(athlete)) return null;
+  if (!priv?.matricula) return "sem matrícula";
+  return PHOTO_ISSUE[priv.photoStatus] || "a foto ainda não foi buscada";
+}
+
+// Correção de dados, da matrícula e da foto (erros de digitação, foto que não veio da instituição…).
+function EditAthleteDialog({ athlete, priv, onClose }) {
   const toast = useToast();
-  const [form, setForm] = useState({ name: "", nickname: "", jerseyNumber: "", position: "", bio: "" });
+  const [form, setForm] = useState({ name: "", nickname: "", jerseyNumber: "", position: "", bio: "", matricula: "" });
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState("");
   const [saving, setSaving] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const fileInput = useRef(null);
+  const id = athlete?.id;
+  const savedMatricula = priv?.matricula || "";
 
   useEffect(() => {
-    if (athlete) {
-      setForm({
-        name: athlete.name || "",
-        nickname: athlete.nickname || "",
-        jerseyNumber: athlete.jerseyNumber ?? "",
-        position: athlete.position || "",
-        bio: athlete.bio || "",
-      });
-    }
-  }, [athlete]);
+    if (!athlete) return;
+    setForm({
+      name: athlete.name || "",
+      nickname: athlete.nickname || "",
+      jerseyNumber: athlete.jerseyNumber ?? "",
+      position: athlete.position || "",
+      bio: athlete.bio || "",
+      matricula: savedMatricula,
+    });
+    setFile(null);
+    // Só ao abrir outro atleta: a lista ao vivo não pode apagar o que o admin está digitando
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  useEffect(() => {
+    if (!file) { setPreview(""); return undefined; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const matricula = form.matricula.trim();
+  const matriculaOk = MATRICULA.test(matricula);
+  const current = athlete ? athletePhoto(athlete, 200) : null;
+  const issue = athlete ? photoIssue(athlete, priv) : null;
+  const busy = saving || fetching;
+
+  const pickFile = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const err = validatePhotoFile(f);
+    if (err) { toast.error(err); return; }
+    setFile(f);
+  };
+
+  const saveMatricula = async () => {
+    if (matricula && matricula !== savedMatricula) await setAthleteMatricula(id, matricula);
+  };
+
+  const fetchPhoto = async () => {
+    setFetching(true);
+    try {
+      await saveMatricula();
+      await fetchInstitutionalPhoto(id);
+      setFile(null);
+      toast.success("Foto trazida do cadastro da instituição");
+    } catch (err) {
+      toast.error(err.message || "Não foi possível buscar a foto.");
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const save = async () => {
     if (form.name.trim().length < 2) return;
+    if (matricula && !matriculaOk) { toast.error("Matrícula: só letras e números, de 4 a 20 caracteres."); return; }
     setSaving(true);
     try {
-      await updateAthlete(athlete.id, form);
+      await saveMatricula();
+      if (file) await uploadAthletePhoto(id, file);
+      await updateAthlete(id, form);
       toast.success("Dados do atleta salvos");
       onClose();
     } catch (err) {
@@ -186,11 +261,50 @@ function EditAthleteDialog({ athlete, onClose }) {
   };
 
   return (
-    <FormDialog open={Boolean(athlete)} title="Editar atleta" submitLabel="Salvar" submitting={saving} onClose={onClose} onSubmit={save}>
+    <FormDialog open={Boolean(athlete)} title="Editar atleta" submitLabel="Salvar" submitting={saving} submitDisabled={fetching} onClose={onClose} onSubmit={save}>
       <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex gap-4 sm:col-span-2">
+          <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-elevated">
+            {preview || current ? (
+              <img src={preview || current} alt="Foto do atleta" className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full w-full place-items-center text-2xl font-bold text-muted">
+                {(form.name || "?").charAt(0)}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="label">Foto</span>
+            <p className={"text-xs " + (issue && !file ? "text-warn" : "text-muted")}>
+              {file ? "Nova foto escolhida. Ela é enviada ao salvar."
+                : issue ? `Sem foto: ${issue}.`
+                  : athlete?.photoSource === "admin" ? "Foto enviada por um administrador."
+                    : athlete?.photoSource === "institucional" ? "Foto do cadastro da instituição."
+                      : "Foto enviada no cadastro."}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs max-md:[&>*]:min-h-11 max-md:[&>*]:px-4">
+              <button type="button" disabled={busy} onClick={() => fileInput.current?.click()} className="rounded-full border border-line px-3 py-1 text-muted hover:text-fg disabled:opacity-60">
+                {current || file ? "Trocar foto" : "Enviar foto"}
+              </button>
+              {file && (
+                <button type="button" disabled={busy} onClick={() => setFile(null)} className="rounded-full border border-line px-3 py-1 text-muted hover:text-fg disabled:opacity-60">
+                  Desfazer
+                </button>
+              )}
+              <button type="button" disabled={busy || !matriculaOk} onClick={fetchPhoto} className="rounded-full border border-line px-3 py-1 text-muted hover:text-fg disabled:opacity-60">
+                {fetching ? "Buscando…" : "Buscar pela matrícula"}
+              </button>
+            </div>
+            <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" onChange={pickFile} className="hidden" />
+          </div>
+        </div>
         <label className="sm:col-span-2">
           <span className="label">Nome completo *</span>
           <input className="input" value={form.name} onChange={set("name")} minLength={2} maxLength={60} required />
+        </label>
+        <label>
+          <span className="label">Matrícula escolar</span>
+          <input className="input font-mono" value={form.matricula} onChange={set("matricula")} maxLength={20} inputMode="numeric" autoComplete="off" spellCheck={false} />
         </label>
         <label>
           <span className="label">Apelido</span>
@@ -200,7 +314,7 @@ function EditAthleteDialog({ athlete, onClose }) {
           <span className="label">Número</span>
           <input className="input" type="number" min={0} max={999} value={form.jerseyNumber} onChange={set("jerseyNumber")} />
         </label>
-        <label className="sm:col-span-2">
+        <label>
           <span className="label">Posição</span>
           <input className="input" value={form.position} onChange={set("position")} maxLength={40} />
         </label>
@@ -257,6 +371,9 @@ function AthleteRow({ athlete, priv, tab, onApprove, onReject, onRemove, onEdit 
           {age != null && ` · ${age} anos`}
         </p>
         {athlete.position && <p className="text-xs text-muted">{athlete.position}</p>}
+        {photoIssue(athlete, priv) && (
+          <p className="mt-1 text-[11px] text-warn">Sem foto: {photoIssue(athlete, priv)}. Adicione em Editar.</p>
+        )}
         {priv?.matricula && (
           <p className="mt-1 text-[11px] text-muted">
             Matrícula <code className="font-mono text-fg">{priv.matricula}</code>

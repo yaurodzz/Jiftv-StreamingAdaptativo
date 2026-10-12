@@ -160,8 +160,8 @@ export default function SystemPage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-semibold">Site institucional (fotos dos atletas)</h2>
           {server && (
-            <span className={"badge " + (server.institutional?.mode === "institucional" ? "bg-accent/10 text-accent" : "border border-line text-muted")}>
-              {server.institutional?.mode === "institucional" ? "Foto pela matrícula" : "Foto por upload"}
+            <span className={"badge " + (server.institutional?.configured ? "bg-accent/10 text-accent" : "border border-line text-muted")}>
+              {server.institutional?.configured ? "Foto pela matrícula" : "Foto enviada pelo admin"}
             </span>
           )}
         </div>
@@ -178,7 +178,8 @@ export default function SystemPage() {
           </dl>
         ) : (
           <p className="text-sm text-muted">
-            Não configurado: o cadastro de atleta pede o envio da foto. Para buscar a foto pela matrícula, defina
+            Não configurado: os atletas são cadastrados sem foto e o admin envia uma em Atletas → Editar.
+            Para buscar a foto pela matrícula, defina
             <code className="mx-1 font-mono">INSTITUCIONAL_API_URL</code> e o token no .env do servidor
             (veja <code className="font-mono">docs/integracao-site-institucional.md</code>).
           </p>

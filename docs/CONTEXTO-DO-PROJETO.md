@@ -1,7 +1,7 @@
 # JIFTv: contexto técnico do projeto
 
 Documento para retomar o desenvolvimento em um chat novo sem perder contexto.
-Estado descrito: **2026-10-11** (inclui a integração com o site institucional, os subdomínios live/api.jiftv.org no túnel
+Estado descrito: **2026-10-12** (inclui o cadastro de atleta sem foto e com matrícula obrigatória, a integração com o site institucional, os subdomínios live/api.jiftv.org no túnel
 e o armazenamento configurável das gravações: pasta local, Google Drive e Cloudinary). Para o passo a passo de uso, veja também o [README.md](../README.md).
 
 > Dica para o novo chat: anexe este arquivo e o README, e diga qual item da seção
@@ -47,6 +47,11 @@ Decisões mais recentes do usuário:
   os alunos. O JIFTv consulta essa API pela **matrícula escolar** (o worker faz a chamada). O contrato real da
   API ainda **não foi confirmado**: o JIFTv assume um formato configurável. Detalhes e perguntas para o
   professor em [integracao-site-institucional.md](integracao-site-institucional.md).
+- **Cadastro de atleta sem foto, com matrícula obrigatória** (2026-10-12, primeiro passo de uma reforma maior
+  da lógica dos atletas): o formulário público não envia mais foto; pede a matrícula, que o worker usa para
+  buscar a foto na API institucional. Se a busca der errado, o cadastro entra **sem foto** e o admin adiciona
+  uma em Painel → Atletas → Editar (único lugar onde se envia foto). O modo "upload" e `ATLETAS_PHOTO_SOURCE`
+  deixaram de existir. Atletas já cadastrados mantêm a foto que tinham.
 - **Gravações no Google Drive, sem ocupar o computador** (2026-10-11): o usuário tem ~400 GB livres no Drive
   e não quer pagar o Cloudinary. O worker envia cada gravação ao Drive, confere e (com a pasta local desligada)
   apaga a cópia do computador; o site toca o vídeo do Drive por meio do worker. Tudo é comandado pela aba
@@ -101,9 +106,11 @@ Ideias centrais (decisões tomadas e o porquê):
   (conteúdo misto é bloqueado). Por isso o túnel da Cloudflare (perfil `tunel` do compose) publica o container
   `media` em `live.jiftv.org` (vídeo) e `api.jiftv.org` (só `/api/*`). O backend entra pelo nginx do `media`, que
   nunca expõe `/internal/*`. RTMP não passa pelo túnel HTTP (veja [dominio-cloudflare.md](dominio-cloudflare.md)).
-- **Foto do atleta pela matrícula**: o cadastro público manda a matrícula ao worker, que consulta a API do
-  site institucional (`api/app/institucional.py`), guarda uma cópia da foto (Cloudinary ou `gravacoes/fotos/`)
-  e grava a matrícula só em `athletePrivate/{id}` (admin). Sem `INSTITUCIONAL_API_URL`, volta ao upload.
+- **Foto do atleta pela matrícula**: o cadastro público manda a matrícula (obrigatória) ao worker, que consulta
+  a API do site institucional (`api/app/institucional.py`), guarda uma cópia da foto (Cloudinary ou
+  `gravacoes/fotos/`) e grava a matrícula só em `athletePrivate/{id}` (admin). Se a busca falhar (ou sem
+  `INSTITUCIONAL_API_URL`), o cadastro entra sem foto, com o motivo em `athletePrivate.photoStatus`, e o admin
+  envia a foto pelo painel (o worker guarda no mesmo lugar). O site nunca envia foto direto ao Cloudinary.
 - **A pasta de vídeos é a fonte da verdade das gravações.** O worker sincroniza
   `gravacoes/videos/` → coleção `vods` (varredura de 60 s + aviso do script ao terminar).
 - **Armazenamento configurável** ([armazenamento.md](armazenamento.md)): a configuração (chaves liga/desliga e pasta
@@ -130,7 +137,7 @@ Ideias centrais (decisões tomadas e o porquê):
 | Banco/Auth/Hosting | Firebase: Firestore, Authentication, Hosting; emuladores via `firebase-tools@13` + OpenJDK 17 (container) |
 | Site | React 18, Vite 5, Tailwind 3 (`darkMode: 'class'`), react-router 6, `hls.js` 1.5, `dashjs` **4.7** (carregados por import dinâmico), `lucide-react`, Inter variável |
 | Infra | Docker Compose; serviços `media`, `api`, `emulators` (perfil `dev`), `tunnel` (perfil `tunel`) |
-| Mídia na nuvem | Google Drive (gravações, OAuth da conta do usuário, escopo `drive.file`); Cloudinary (vídeo das gravações; fotos de atletas: cópia vinda do site institucional, ou upload com preset *unsigned*) |
+| Mídia na nuvem | Google Drive (gravações, OAuth da conta do usuário, escopo `drive.file`); Cloudinary (vídeo das gravações; fotos de atletas: cópia vinda do site institucional ou enviada pelo admin, sempre pelo worker) |
 | Integrações | API do site institucional (fotos pela matrícula); domínio `jiftv.org` na Cloudflare (túnel `jiftv`: `live.` e `api.jiftv.org`) |
 
 Ambiente de desenvolvimento do usuário: Windows 11, Docker Desktop 28.5.1, Node 20.19, Python 3.13 local,
@@ -152,7 +159,7 @@ Jiftv-Streaming-Adaptativo/
 ├── firestore.rules              regras de segurança
 ├── firestore.indexes.json       índices compostos (vods, athletes, scoutEvents)
 ├── docs/
-│   ├── cloudinary-preset.md     preset unsigned das fotos de atletas (modo upload)
+│   ├── cloudinary-preset.md     OBSOLETO desde 2026-10-12 (preset unsigned do antigo upload de foto)
 │   ├── integracao-site-institucional.md   fotos pela matrícula: contrato assumido, segurança, perguntas,
 │   │                                      kit zip para o professor (JIFTv-API-Fotos-Professor.zip)
 │   ├── dominio-cloudflare.md    jiftv.org, túnel, RTMP, Firebase Hosting, CORS
@@ -200,7 +207,7 @@ Jiftv-Streaming-Adaptativo/
 │       ├── comandos.py          coleção commands: delete_vod (local, Cloudinary, lixeira do Drive), resync, logs
 │       ├── sistema.py           publica system/server a cada 20 s ; limpa events
 │       ├── routes.py            /internal/* (nginx) e /api/saude, /api/audiencia, /api/arquivo-auth
-│       ├── atletas.py           GET /api/atletas/config e POST /api/atletas (cadastro público: matrícula ou upload)
+│       ├── atletas.py           POST /api/atletas (cadastro público por matrícula) e foto/matrícula pelo painel
 │       ├── institucional.py     cliente da API do site institucional (foto pela matrícula; anti-SSRF)
 │       └── cli.py               python -m app.cli admin|remover-admin|listar
 ├── emulators/Dockerfile         Auth + Firestore locais (export em /dados/export)
@@ -210,7 +217,7 @@ Jiftv-Streaming-Adaptativo/
 │   │                            ← web/.env (fora do git): config Web do jiftv-stream (app "JIFTv Web")
 │   └── src/
 │       ├── App.jsx, main.jsx, index.css (tokens do Tema IF)
-│       ├── lib/        firebase, env, media (URLs HLS/DASH/arquivos), format, cloudinary, streamKey, uploadPhoto
+│       ├── lib/        firebase, env, media (URLs HLS/DASH/arquivos), format, cloudinary, streamKey
 │       ├── providers/  Theme, Auth (claim admin), LiveStatus
 │       ├── services/   streams, vods, modalities, classes, athletes, scoutEvents, commands, system, publicApi,
 │       │               storage (aba Armazenamento: fala direto com o worker)
@@ -234,8 +241,8 @@ Jiftv-Streaming-Adaptativo/
 | `streams` | painel + worker | painel: `title`, `slug`, modalidade (`modalityId/Code/Name`), `location`, `teamA/B`, `scoreA/B`, `scheduledFor`, `listed`, `keyActive`, `description`. Worker: `isLive`, `startedAt`, `endedAt`, `viewers`, `peakViewers`, `input{width,height,fps,bitrate,codecs}`, `qualitiesActive/Total`, `clientId`, `origin` |
 | `streamKeys/{streamId}` | painel | `streamKey` (20 chars Crockford base32). **Só admin lê** |
 | `vods` | worker + painel | ID `AAAAMMDD-COD-HHMMSS`. `title`, `modality*`, `recordedAt`, `durationSec`, `width/height`, `bytes`, `localFile`, `localThumb`, `localAvailable`, `visible`, `views`, `playbackUrl`/`thumbnailUrl` (Cloudinary), `cloudinary{status,error,attempts,nextAttemptAt,publicId,secureUrl}`, `drive{status,fileId,thumbId,infoId,webViewLink,bytes,md5,progress,error,attempts,nextAttemptAt}`, `localRemovedAt`, `sourceStreamId`, `streamSlug`, `teamA/B`, `scoreA/B` |
-| `athletePrivate/{athleteId}` | worker | `matricula`, `modalityCode`, `institutionalName` (nome devolvido pela API), `photoSource`, `verifiedAt`. **Só admin lê/apaga** |
-| `athletes` | worker (cadastro) + painel | `name`, `nickname`, `birthDate`, `photoUrl` (Cloudinary) **ou** `photoPath` (`fotos/<id>.<ext>`, servido pelo media), `photoSource` (`institucional`/`upload`), `jerseyNumber`, `position`, `bio`, `modalityCode/Name`, `classId/Name/Campus`, `status` (`pending`/`approved`/`rejected`), `submittedAt/Ip/ByName/ByEmail`, `approvedAt/By`, `rejectedAt/By/Reason` |
+| `athletePrivate/{athleteId}` | worker | `matricula`, `modalityCode`, `institutionalName` (nome devolvido pela API), `verifiedAt`, `photoStatus` (`ok`, ou por que ficou sem foto: `nao_configurada`/`nao_encontrada`/`sem_foto`/`erro`). Criado em todo cadastro. **Só admin lê/apaga**; a matrícula é corrigida pelo worker |
+| `athletes` | worker (cadastro) + painel | `name`, `nickname`, `birthDate`, `photoUrl` (Cloudinary) **ou** `photoPath` (`fotos/<id>.<ext>`, servido pelo media), (os dois ausentes = sem foto), `photoSource` (`institucional`/`admin`/`null`; `upload` só em cadastros antigos), `jerseyNumber`, `position`, `bio`, `modalityCode/Name`, `classId/Name/Campus`, `status` (`pending`/`approved`/`rejected`), `submittedAt/Ip/ByName/ByEmail`, `approvedAt/By`, `rejectedAt/By/Reason` |
 | `scoutEvents` | painel | `matchId` (id do vod), `matchType`, `athleteId/Name`, `modalityCode`, `type`, `value`, `videoTime`, `note`, `createdAt/By` |
 | `system/server` | worker | estado do servidor a cada 20 s: `lastSeen`, `media{...}`, `disk`, `recordings`, `cloudinary`, `storage{local,drive,cloudinary}`, `institutional{configured,host,mode,lastAt,lastOk,lastError}`, `qualities`, `viewers` |
 | `events` | worker | histórico exibido no painel (`type`, `message`, `at`) |
@@ -280,13 +287,17 @@ Gravações ocultas só abrem com `?token=<ID token de admin>` (nginx `auth_requ
 
 **Excluir gravação / ler logs / reverificar pasta**: painel cria documento em `commands`; worker executa.
 
-**Cadastro de atleta**: o formulário pergunta ao worker como obter a foto (`GET /api/atletas/config`).
-Modo **institucional** (padrão com `INSTITUCIONAL_API_URL`): a pessoa informa a matrícula → `POST /api/atletas`
-→ o worker valida, consulta a API do site institucional, guarda a foto (Cloudinary, ou `gravacoes/fotos/`) e
-grava `athletes/{id}` (público após aprovar) + `athletePrivate/{id}` (matrícula) sempre como `pending`
-(limites: 10 envios/min e 5 matrículas inexistentes/10 min por IP; 409 se a matrícula já tem cadastro ativo
-na modalidade). Modo **upload**: foto direto ao Cloudinary (preset unsigned `athletes_profile`) e a URL vai no
-`POST`. Em ambos o admin aprova em Painel → Atletas → aparece na vitrine.
+**Cadastro de atleta** (reformulado em 2026-10-12): o formulário não envia foto; a pessoa informa os dados e a
+**matrícula** (obrigatória) → `POST /api/atletas` → o worker valida, consulta a API do site institucional, guarda
+a foto (Cloudinary, ou `gravacoes/fotos/`) e grava `athletes/{id}` (público após aprovar) + `athletePrivate/{id}`
+(matrícula e `photoStatus`) sempre como `pending` (limite: 10 envios/min por IP; 409 se a matrícula já tem
+cadastro ativo na modalidade). **Se a busca da foto falhar** (API fora do ar ou não configurada, matrícula
+desconhecida, aluno sem foto) o cadastro é aceito do mesmo jeito, sem foto, e a resposta ao público é idêntica.
+O admin vê "Sem foto: <motivo>" em Painel → Atletas e resolve em **Editar**: enviar uma foto
+(`PUT /api/atletas/{id}/foto`, até 5 MB, JPEG/PNG/WebP), corrigir a matrícula (`PUT /api/atletas/{id}/matricula`)
+ou buscar de novo na instituição (`POST /api/atletas/{id}/foto/institucional`). Essas três rotas exigem o ID
+token de admin. Depois o admin aprova → aparece na vitrine. `GET /api/atletas/config` ficou só por
+compatibilidade com versões antigas do site.
 
 **Scout**: Painel → Gravações → ícone de prancheta (`/scout/<vodId>`) → escolher atleta, tocar o vídeo e
 clicar no evento (grava `videoTime`). Tipos de evento por modalidade em Painel → Modalidades → Scout.
@@ -294,7 +305,8 @@ clicar no evento (grava `videoTime`). Tipos de evento por modalidade em Painel �
 Rotas do site: `/live`, `/live/:slug`, `/catalogo`, `/partidas/:id`, `/atletas`, `/atletas/novo`,
 `/atletas/:id`, `/admin/login`, `/admin` (visão geral), `/admin/{transmissoes,transmissoes/:id,gravacoes,armazenamento,
 atletas,modalidades,turmas,sistema}`, `/scout/:vodId`. Rotas do worker: `/internal/{publish,publish_done,gravacao}`
-(só rede interna), `/api/{saude,audiencia,arquivo-auth,atletas}`, e as do armazenamento:
+(só rede interna), `/api/{saude,audiencia,arquivo-auth,atletas}`, `/api/atletas/{id}/{foto,foto/institucional,matricula}` (admin; no
+nginx, `location ^~ /api/atletas/` aceita corpo de até 6 MB, o resto de `/api/` segue em 16k), e as do armazenamento:
 `/api/armazenamento`, `/api/armazenamento/pastas`, `/api/drive/{conectar,callback,desconectar}`, `/api/video/<id>`.
 
 ---
@@ -326,6 +338,12 @@ Tudo abaixo foi executado nos **emuladores locais** com um FFmpeg simulando o OB
   limite de 5 matrículas inexistentes por IP; foto servida em `/fotos/<id>.png`; `athletePrivate` negado a
   visitantes; formulário no modo matrícula pela interface; painel mostra a matrícula e "confere com o cadastro";
   aprovar e ver na vitrine; card "Site institucional" em Painel → Sistema.
+  **Atenção: esses testes são do fluxo antigo.** A reforma de 2026-10-12 (cadastro sem foto, matrícula
+  obrigatória, foto pelo painel) só teve verificados o build do site (`npm run build`), a compilação do Python
+  e o formulário público renderizado em `localhost:5173`. O Docker estava desligado: **o worker novo, as três
+  rotas de admin, o diálogo Editar com envio de foto e o limite novo do nginx ainda não rodaram**. Para valer é
+  preciso `docker compose up -d --build api` e recarregar o nginx do `media` (fora de uma transmissão ao vivo),
+  e publicar o site de novo (`firebase deploy --only hosting`).
 
 - **Streaming adaptativo e travamentos (2026-10-11)**: conferido no container `media` que o HLS sai com as 4
   qualidades (playlist mestre com 1080p/720p/480p/240p, segmentos de 2 s alinhados entre elas, cada um começando
@@ -373,10 +391,10 @@ Variáveis do `.env` da raiz (só os nomes): `FIREBASE_PROJECT_ID`, `FIRESTORE_E
 `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD`, e (fotos pela matrícula / CORS)
 `INSTITUCIONAL_API_URL`, `INSTITUCIONAL_API_TOKEN`, `INSTITUCIONAL_API_HEADER`, `INSTITUCIONAL_API_PATH`,
 `INSTITUCIONAL_API_PHOTO_FIELDS`, `INSTITUCIONAL_API_NAME_FIELDS`, `INSTITUCIONAL_PHOTO_HOSTS`,
-`INSTITUCIONAL_API_TIMEOUT`, `ATLETAS_PHOTO_SOURCE`, `CORS_ORIGINS`. No `.env` de desenvolvimento, a API
+`INSTITUCIONAL_API_TIMEOUT`, `CORS_ORIGINS` (`ATLETAS_PHOTO_SOURCE` foi removida em 2026-10-12). No `.env` de desenvolvimento, a API
 institucional aponta para o mock (`http://institucional-mock:8090`, token `mock-token`).
-Variáveis do site (`web/.env.example`): `VITE_FIREBASE_*`, `VITE_MEDIA_URL`, `VITE_API_URL` (vazio = `VITE_MEDIA_URL`), `VITE_RTMP_URL`,
-`VITE_CLOUDINARY_CLOUD_NAME`, `VITE_CLOUDINARY_UPLOAD_PRESET`; em dev vale `web/.env.development`
+Variáveis do site (`web/.env.example`): `VITE_FIREBASE_*`, `VITE_MEDIA_URL`, `VITE_API_URL` (vazio = `VITE_MEDIA_URL`), `VITE_RTMP_URL`
+(as `VITE_CLOUDINARY_*` saíram: o site não envia mais foto ao Cloudinary); em dev vale `web/.env.development`
 (`VITE_FIREBASE_USE_EMULATORS=true`); no build vale `web/.env.production` (`VITE_MEDIA_URL=https://live.jiftv.org`,
 `VITE_API_URL=https://api.jiftv.org`), que tem prioridade sobre o `web/.env`. O túnel não usa variável
 (`CLOUDFLARE_TUNNEL_TOKEN` saiu): rotas em `cloudflared/config.yml`, credencial em `secrets/cloudflared-tunel.json`.
@@ -459,8 +477,11 @@ Nada disto roda ainda em produção:
   (herdado do projeto de referência). **A matrícula já foi tirada daí** (vai para `athletePrivate`); falta
   fazer o mesmo com esses campos e mostrar só a idade; incluir aviso/consentimento no formulário. A foto de
   aluno no site público exige autorização da instituição.
-- **Enumeração de matrículas**: "matrícula não encontrada" revela, devagar (5 erros/10 min por IP), quais
-  matrículas existem. Alternativa: restringir o cadastro a quem está logado ou mover para o painel.
+- **Enumeração de matrículas**: resolvida em 2026-10-12 para o caso "matrícula não encontrada" (o cadastro é
+  aceito sem foto e a resposta é a mesma). Resta o 409 "já tem um cadastro nesta modalidade", que revela que
+  aquela matrícula já foi usada em um cadastro do JIFTv. Em troca, **qualquer matrícula com formato válido é
+  aceita**, então cadastros com matrícula inventada chegam à fila: o admin vê "Sem foto: matrícula não
+  encontrada" e rejeita.
 - Fotos de atletas excluídos no painel **não** são apagadas do Cloudinary nem de `gravacoes/fotos/`; a foto
   de atleta pendente/rejeitado fica acessível a quem souber a URL (nome = id aleatório do atleta).
 - **IP do OBS público**: o worker grava `origin` (endereço do OBS) e `clientId` em `streams`, que é de leitura

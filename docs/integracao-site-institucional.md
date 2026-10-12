@@ -3,6 +3,12 @@
 O site institucional do IFSC (feito pelo professor) já tem a foto de todos os alunos. O JIFTv busca a foto
 lá pela **matrícula escolar**, em vez de a pessoa enviar uma foto no cadastro de atleta.
 
+> **Mudança de 2026-10-12:** a matrícula passou a ser **obrigatória** no cadastro público e o formulário **não
+> envia mais foto** em nenhuma situação. Quando a busca pela matrícula não traz foto, o cadastro entra sem foto
+> e o admin adiciona uma em **Painel → Atletas → Editar**. O antigo modo "upload" (`ATLETAS_PHOTO_SOURCE`,
+> preset do Cloudinary) foi removido. Esta parte ainda não foi testada com o worker rodando (veja "Limitações e
+> testes" em [CONTEXTO-DO-PROJETO.md](CONTEXTO-DO-PROJETO.md)).
+
 > **Estado: implementado e testado contra um servidor de mentira** (`tools/mock_institucional.py`).
 > O contrato da API **real** ainda não foi confirmado com o professor: o JIFTv assume o formato descrito
 > abaixo e tudo é configurável por variáveis de ambiente. Antes de usar de verdade, confirme os itens da
@@ -26,11 +32,38 @@ Pessoa (site jiftv.org)            Worker (servidor da escola)             Site 
    Admin aprova no painel → o atleta aparece na vitrine com a foto
 ```
 
+Se a consulta falhar, o cadastro é gravado do mesmo jeito, **sem foto**, e a resposta ao público é a mesma
+`201`. O motivo fica em `athletePrivate/{id}.photoStatus`:
+
+| `photoStatus` | Significa | O painel mostra |
+|---|---|---|
+| `ok` | a foto veio da instituição (ou o admin enviou uma) | a foto |
+| `nao_encontrada` | a API respondeu 404 para a matrícula | "Sem foto: matrícula não encontrada no cadastro da instituição" |
+| `sem_foto` | a matrícula existe, mas sem foto | "Sem foto: o cadastro da instituição não tem foto" |
+| `erro` | rede, credenciais, resposta inesperada (detalhe no histórico de atividades) | "Sem foto: a consulta ao site da instituição falhou" |
+| `nao_configurada` | `INSTITUCIONAL_API_URL` vazio | "Sem foto: a busca pela matrícula não está configurada no servidor" |
+
+## O que o admin faz quando a foto não vem
+
+Em **Painel → Atletas → Editar** (qualquer aba: pendentes, aprovados, rejeitados):
+
+- **Enviar foto / Trocar foto**: escolhe um arquivo (JPEG, PNG ou WebP, até 5 MB), que é enviado ao salvar.
+  Rota `PUT /api/atletas/{id}/foto` (corpo = a imagem). O worker confere o tipo pelos bytes e guarda no mesmo
+  lugar das fotos da instituição; o perfil fica com `photoSource: "admin"`.
+- **Matrícula escolar**: corrige um erro de digitação ou informa a matrícula de um atleta antigo que não tinha.
+  Rota `PUT /api/atletas/{id}/matricula` (recusa com 409 se outro cadastro ativo da modalidade já usa a matrícula).
+- **Buscar pela matrícula**: salva a matrícula do campo (se mudou) e consulta a instituição de novo. Rota
+  `POST /api/atletas/{id}/foto/institucional`. Serve para quando a API estava fora do ar no cadastro.
+
+As três rotas exigem `Authorization: Bearer <ID token de admin>`. No nginx, `location ^~ /api/atletas/` aceita
+corpo de até 6 MB (o restante de `/api/`, incluindo o cadastro público, continua limitado a 16k).
+
 - A foto **nunca passa pelo navegador** de quem cadastra e **não é mostrada a ele** (evita que alguém use o
   formulário para ver a foto de qualquer matrícula).
 - O servidor da escola é quem conversa com a API. O token fica só no `.env` do servidor (nunca no site).
-- Se `INSTITUCIONAL_API_URL` estiver vazio, o cadastro volta ao modo antigo (upload de foto ao Cloudinary,
-  [cloudinary-preset.md](cloudinary-preset.md)). O formulário descobre o modo em `GET /api/atletas/config`.
+- Se `INSTITUCIONAL_API_URL` estiver vazio, o cadastro continua pedindo a matrícula, todo atleta entra sem
+  foto (`photoStatus: nao_configurada`) e o admin envia as fotos pelo painel. Quando a API for configurada,
+  "Buscar pela matrícula" traz a foto dos que já estão cadastrados.
 
 ## Contrato assumido (ajustável)
 
@@ -51,8 +84,8 @@ data URI (`data:image/…;base64,…`) ou base64 puro. O nome do aluno, se vier 
 padrão `nome,name,nomeCompleto`), é guardado em `athletePrivate` para o admin conferir com o nome digitado.
 
 Códigos HTTP: `404` = matrícula não encontrada; `401`/`403` = credenciais recusadas (vira alerta no painel);
-qualquer outra falha = "site da instituição indisponível" para quem cadastra (o motivo real vai para o histórico
-de atividades do painel).
+qualquer outra falha = `photoStatus: erro` (o motivo real vai para o histórico de atividades do painel). Quem
+cadastra não vê nenhuma dessas falhas: só o admin.
 
 Se o contrato real for diferente (outro caminho, outro campo, autenticação por chave em outro cabeçalho), o mais
 provável é bastar mudar o `.env`. Se for algo mais diferente (POST, OAuth, consulta por CPF…), o ponto único
@@ -69,15 +102,19 @@ INSTITUCIONAL_API_PATH=/alunos/{matricula}/foto
 INSTITUCIONAL_PHOTO_HOSTS=            # CDN extra, se as fotos ficarem em outro domínio
 ```
 
-Depois `docker compose up -d api`. Em **Painel → Sistema → Site institucional** aparecem o modo, o servidor
-da API e o resultado da última consulta.
+Depois `docker compose up -d api`. Em **Painel → Sistema → Site institucional** aparecem se a busca pela
+matrícula está configurada, o servidor da API e o resultado da última consulta.
 
 ## Onde a foto fica guardada
 
 1. **Cloudinary**, se `CLOUDINARY_URL` estiver configurado: pasta `<CLOUDINARY_FOLDER>/athletes/pending/<id>`
    (se o envio falhar, cai para o item 2 e registra o aviso).
 2. **Pasta local** `gravacoes/fotos/<id>.jpg|png|webp`, servida pelo servidor de mídia em `/fotos/<id>.<ext>`
-   (campo `photoPath` no perfil). Funciona sem Cloudinary, mas some do site se o servidor da escola estiver fora.
+   (campo `photoPath` no perfil, com `?v=<instante>` no fim para o navegador não mostrar a foto antiga depois
+   de uma troca). Funciona sem Cloudinary, mas some do site se o servidor da escola estiver fora.
+
+A foto enviada pelo admin segue o mesmo caminho e substitui a anterior (mesmo `public_id` no Cloudinary; na
+pasta local o arquivo antigo do atleta é apagado).
 
 Guardar uma cópia (em vez de apontar para o site do professor) evita depender do site dele para exibir a foto,
 de autenticação nas imagens e de bloqueio de hotlink. A foto de um atleta **excluído** no painel não é apagada
@@ -92,10 +129,10 @@ São dados de **menores de idade**: matrícula e foto.
   servidor, limita a resposta a 5 MB e confere o tipo da imagem pelos bytes. Isso impede que uma resposta
   maliciosa faça o servidor da escola acessar endereços internos (SSRF). Testado com os casos do mock.
 - Matrícula: só letras e números, 4 a 20 caracteres.
-- **Varredura de matrículas**: o cadastro aceita no máximo 10 envios por minuto e 5 matrículas inexistentes
-  a cada 10 minutos por IP (`CF-Connecting-IP` atrás da Cloudflare). A mensagem "matrícula não encontrada"
-  ainda revela, devagar, quais matrículas existem. Se isso for um problema, restrinja o cadastro a quem está
-  logado ou mova o cadastro para o painel.
+- **Varredura de matrículas**: o cadastro aceita no máximo 10 envios por minuto por IP (`CF-Connecting-IP`
+  atrás da Cloudflare) e, desde 2026-10-12, **não diz mais se a matrícula existe**: com ou sem foto a resposta
+  é a mesma. Só o 409 de matrícula repetida na modalidade ainda revela que ela já foi usada no JIFTv. O outro
+  lado: matrículas inventadas entram na fila e cabe ao admin rejeitar (o painel avisa "matrícula não encontrada").
 - A mesma matrícula não pode ter dois cadastros ativos na mesma modalidade (409).
 - Todo cadastro entra como `pending`; o admin compara o nome digitado com o nome do cadastro institucional
   (o painel avisa quando não bate) antes de aprovar.
@@ -153,5 +190,5 @@ Se o contrato, o cliente (`institucional.py`) ou o mock mudarem, atualize o kit 
 
 - Pré-preencher nome/turma/nascimento a partir da API (hoje só o nome é guardado, para conferência).
 - Cadastro em lote: o admin cola uma lista de matrículas e o JIFTv cria os perfis.
-- Botão "Atualizar foto" no painel quando o site institucional trocar a foto.
+- ~~Botão "Atualizar foto" no painel~~: feito em 2026-10-12 ("Buscar pela matrícula" em Atletas → Editar).
 - Mover a foto aprovada para `athletes/approved` no Cloudinary.

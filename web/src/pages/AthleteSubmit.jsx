@@ -1,20 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { UploadCloud, Check, GraduationCap } from "lucide-react";
+import { Check } from "lucide-react";
 import { subscribeModalities } from "../services/modalities.js";
 import { subscribeClasses } from "../services/classes.js";
-import { getAthleteConfig, submitAthlete } from "../services/publicApi.js";
-import { uploadAthletePhoto, validatePhotoFile } from "../lib/uploadPhoto.js";
+import { submitAthlete } from "../services/publicApi.js";
 import { computeAge } from "../features/athletes/format.js";
 
 // /atletas/novo — formulário público de submissão. Fica pendente até um admin aprovar;
 // só então aparece na vitrine.
 //
-// A foto vem de uma de duas origens, definida pelo worker (GET /api/atletas/config):
-//   institucional  a pessoa informa a matrícula escolar e o worker busca a foto na API do
-//                  site institucional (a foto nunca passa pelo navegador)
-//   upload         a pessoa envia a foto direto ao Cloudinary (preset unsigned)
-// Os dados vão para POST /api/atletas do worker.
+// Aqui não se envia foto: a pessoa informa a matrícula escolar e o worker (POST /api/atletas)
+// busca a foto na API do site institucional. Se a busca não der certo, o cadastro entra sem
+// foto e o admin adiciona uma pelo painel (Atletas → Editar).
 //
 // Validações client-side espelham as do servidor — ele segue sendo a fonte de verdade,
 // mas evitamos requests inúteis.
@@ -33,39 +30,20 @@ export default function AthleteSubmit() {
   const [modalities, setModalities] = useState([]);
   const [classes, setClasses] = useState([]);
   const [form, setForm] = useState(INITIAL);
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState("");
-  const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState("idle"); // idle | uploading | submitting | done
+  const [phase, setPhase] = useState("idle"); // idle | submitting | done
   const [error, setError] = useState("");
   const [submittedId, setSubmittedId] = useState(null);
-  const [source, setSource] = useState(undefined); // undefined = carregando, null = servidor fora do ar
-  const fileInputRef = useRef(null);
 
   useEffect(() => subscribeModalities(setModalities), []);
   useEffect(() => subscribeClasses(setClasses), []);
   useEffect(() => { document.title = "Cadastrar atleta · JIFTv"; }, []);
-  useEffect(() => { getAthleteConfig().then((c) => setSource(c?.origem ?? null)); }, []);
-
-  // Preview local (objectURL); revoga ao trocar/desmontar.
-  useEffect(() => {
-    if (!file) { setPreview(""); return; }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const age = computeAge(form.birthDate);
 
-  const byMatricula = source === "institucional";
-
   const localError = useMemo(() => {
-    if (source === undefined) return "Conectando ao servidor…";
-    if (source === null) return "O servidor do JIFTv está fora do ar. Tente de novo mais tarde.";
-    if (byMatricula && !MATRICULA.test(form.matricula.trim())) return "Informe a matrícula do aluno (só letras e números).";
-    if (!byMatricula && !file) return "Escolha uma foto.";
     if (form.name.trim().length < 2) return "Informe o nome completo.";
+    if (!MATRICULA.test(form.matricula.trim())) return "Informe a matrícula do aluno (só letras e números, de 4 a 20).";
     if (!form.birthDate) return "Informe a data de nascimento.";
     if (age == null || age < 8 || age > 80) return "Data de nascimento fora da faixa aceita.";
     if (!form.modalityCode) return "Escolha a modalidade.";
@@ -73,34 +51,19 @@ export default function AthleteSubmit() {
     if (form.submittedByEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.submittedByEmail))
       return "E-mail de contato inválido.";
     return null;
-  }, [file, form, age, source, byMatricula]);
-
-  const onPickFile = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const err = validatePhotoFile(f);
-    if (err) { setError(err); e.target.value = ""; return; }
-    setError(""); setFile(f);
-  };
+  }, [form, age]);
 
   const submit = async (e) => {
     e.preventDefault();
     if (localError) { setError(localError); return; }
     setError("");
     try {
-      let photoUrl;
-      if (!byMatricula) {
-        setPhase("uploading");
-        setProgress(0);
-        photoUrl = await uploadAthletePhoto(file, { onProgress: setProgress });
-      }
-
       setPhase("submitting");
       const payload = {
         name: form.name.trim(),
         nickname: form.nickname.trim() || undefined,
         birthDate: form.birthDate,
-        ...(byMatricula ? { matricula: form.matricula.trim() } : { photoUrl }),
+        matricula: form.matricula.trim(),
         jerseyNumber: form.jerseyNumber ? Number(form.jerseyNumber) : undefined,
         position: form.position.trim() || undefined,
         bio: form.bio.trim() || undefined,
@@ -133,7 +96,7 @@ export default function AthleteSubmit() {
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Link to="/atletas" className="btn-ghost">Ver vitrine</Link>
             <button
-              onClick={() => { setForm(INITIAL); setFile(null); setPreview(""); setPhase("idle"); setSubmittedId(null); }}
+              onClick={() => { setForm(INITIAL); setPhase("idle"); setSubmittedId(null); }}
               className="btn-primary"
             >
               Cadastrar outro
@@ -163,85 +126,58 @@ export default function AthleteSubmit() {
       </header>
 
       <form onSubmit={submit} className="grid gap-6 rounded-3xl border border-line bg-surface p-4 sm:p-6 md:p-8" noValidate>
-        <div className="grid gap-6 md:grid-cols-[200px_1fr]">
-          {byMatricula ? (
-            <div>
-              <div className="grid aspect-square w-40 place-items-center rounded-2xl border border-dashed border-line bg-elevated text-muted md:w-full">
-                <GraduationCap size={34} />
-              </div>
-              <label className="mt-3 block text-sm font-medium text-fg">
-                Matrícula escolar *
-                <input
-                  value={form.matricula}
-                  onChange={set("matricula")}
-                  maxLength={20}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  enterKeyHint="next"
-                  required
-                  className="input mt-1 font-mono"
-                />
-              </label>
-              <p className="mt-2 text-xs text-muted">
-                A foto vem do cadastro da instituição, pela matrícula. Ela só aparece depois da aprovação.
-              </p>
-            </div>
-          ) : (
-            <>
-              <PhotoPicker
-                preview={preview}
-                onPick={() => fileInputRef.current?.click()}
-                onClear={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                file={file}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={onPickFile}
-                className="hidden"
-              />
-            </>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Nome completo *" full>
-              <input value={form.name} onChange={set("name")} maxLength={60} required autoComplete="name" autoCapitalize="words" enterKeyHint="next" className="input" />
-            </Field>
-            <Field label="Apelido">
-              <input value={form.nickname} onChange={set("nickname")} maxLength={30} autoComplete="off" autoCapitalize="words" enterKeyHint="next" className="input" />
-            </Field>
-            <Field label="Data de nascimento *">
-              <input type="date" value={form.birthDate} onChange={set("birthDate")} required autoComplete="bday" className="input max-md:min-w-0 max-md:appearance-none max-md:text-left" />
-              {age != null && <p className="mt-1 text-xs text-muted">{age} anos</p>}
-            </Field>
-            <Field label="Número">
-              <input type="number" inputMode="numeric" pattern="[0-9]*" min={0} max={999} value={form.jerseyNumber} onChange={set("jerseyNumber")} autoComplete="off" enterKeyHint="next" className="input" />
-            </Field>
-            <Field label="Modalidade *">
-              <select value={form.modalityCode} onChange={set("modalityCode")} required className="input">
-                <option value="">Escolher…</option>
-                {modalities.map((m) => (
-                  <option key={m.id} value={m.code}>{m.code} — {m.name}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Turma *">
-              <select value={form.classId} onChange={set("classId")} required className="input">
-                <option value="">Escolher…</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.campus ? `${c.name} — ${c.campus}` : c.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Posição" full>
-              <input value={form.position} onChange={set("position")} maxLength={40} placeholder="Ex.: Pivô, Ala, Goleira…" autoComplete="off" autoCapitalize="sentences" enterKeyHint="next" className="input" />
-            </Field>
-          </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Nome completo *" full>
+            <input value={form.name} onChange={set("name")} maxLength={60} required autoComplete="name" autoCapitalize="words" enterKeyHint="next" className="input" />
+          </Field>
+          <Field label="Matrícula escolar *">
+            <input
+              value={form.matricula}
+              onChange={set("matricula")}
+              maxLength={20}
+              inputMode="numeric"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
+              required
+              className="input font-mono"
+            />
+            <p className="mt-1 text-xs font-normal text-muted">
+              Usamos a matrícula para buscar a foto do perfil no cadastro da instituição. A matrícula não aparece no site.
+            </p>
+          </Field>
+          <Field label="Apelido">
+            <input value={form.nickname} onChange={set("nickname")} maxLength={30} autoComplete="off" autoCapitalize="words" enterKeyHint="next" className="input" />
+          </Field>
+          <Field label="Data de nascimento *">
+            <input type="date" value={form.birthDate} onChange={set("birthDate")} required autoComplete="bday" className="input max-md:min-w-0 max-md:appearance-none max-md:text-left" />
+            {age != null && <p className="mt-1 text-xs text-muted">{age} anos</p>}
+          </Field>
+          <Field label="Número">
+            <input type="number" inputMode="numeric" pattern="[0-9]*" min={0} max={999} value={form.jerseyNumber} onChange={set("jerseyNumber")} autoComplete="off" enterKeyHint="next" className="input" />
+          </Field>
+          <Field label="Modalidade *">
+            <select value={form.modalityCode} onChange={set("modalityCode")} required className="input">
+              <option value="">Escolher…</option>
+              {modalities.map((m) => (
+                <option key={m.id} value={m.code}>{m.code} — {m.name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Turma *">
+            <select value={form.classId} onChange={set("classId")} required className="input">
+              <option value="">Escolher…</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.campus ? `${c.name} — ${c.campus}` : c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Posição" full>
+            <input value={form.position} onChange={set("position")} maxLength={40} placeholder="Ex.: Pivô, Ala, Goleira…" autoComplete="off" autoCapitalize="sentences" enterKeyHint="next" className="input" />
+          </Field>
         </div>
 
         <Field label="Bio (opcional)">
@@ -272,21 +208,6 @@ export default function AthleteSubmit() {
           </p>
         )}
 
-        {phase === "uploading" && (
-          <div>
-            <div className="mb-1 flex justify-between text-xs text-muted">
-              <span>Enviando foto…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-elevated">
-              <div
-                className="h-full bg-accent transition-[width]"
-                style={{ width: `${Math.max(4, Math.round(progress * 100))}%` }}
-              />
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <button
             type="button"
@@ -301,9 +222,7 @@ export default function AthleteSubmit() {
             disabled={busy || !!localError}
             className="btn-primary disabled:opacity-60 max-sm:justify-center"
           >
-            {phase === "uploading" ? "Enviando foto…"
-              : phase === "submitting" ? "Enviando cadastro…"
-              : "Enviar para aprovação"}
+            {phase === "submitting" ? "Enviando cadastro…" : "Enviar para aprovação"}
           </button>
         </div>
       </form>
@@ -322,44 +241,5 @@ function Field({ label, children, full }) {
       {label}
       <div className="mt-1">{children}</div>
     </label>
-  );
-}
-
-function PhotoPicker({ preview, onPick, onClear, file }) {
-  return (
-    <div>
-      <div className="relative mx-auto aspect-square w-40 overflow-hidden rounded-2xl border border-dashed border-line bg-elevated md:w-full">
-        {preview ? (
-          <img src={preview} alt="Prévia da foto" className="h-full w-full object-cover" />
-        ) : (
-          <button
-            type="button"
-            onClick={onPick}
-            className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted hover:text-fg"
-          >
-            <UploadCloud size={28} />
-            <span className="text-xs">Adicionar foto</span>
-          </button>
-        )}
-      </div>
-      <div className="mt-2 flex items-center justify-center gap-2 text-xs max-md:text-sm">
-        {preview ? (
-          <>
-            <button type="button" onClick={onPick} className="text-accent hover:underline max-md:min-h-11 max-md:px-3">Trocar</button>
-            <span className="text-muted">·</span>
-            <button type="button" onClick={onClear} className="text-live hover:underline max-md:min-h-11 max-md:px-3">Remover</button>
-          </>
-        ) : (
-          <span className="text-center text-xs text-muted">
-            JPG, PNG ou WebP até 2 MB. Foto quadrada fica melhor.
-          </span>
-        )}
-      </div>
-      {file && (
-        <p className="mt-1 text-center text-[11px] text-muted">
-          {(file.size / 1024).toFixed(0)} KB
-        </p>
-      )}
-    </div>
   );
 }

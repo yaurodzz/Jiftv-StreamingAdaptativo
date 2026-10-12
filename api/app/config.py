@@ -62,7 +62,7 @@ DRIVE_CLIENT_SECRET = _env("GOOGLE_OAUTH_CLIENT_SECRET")
 API_PUBLICA = (_env("API_PUBLIC_URL") or "https://api.jiftv.org").rstrip("/")
 
 # API do site institucional (feito pelo professor): fornece a foto de cada aluno pela matrícula.
-# Veja docs/integracao-site-institucional.md. Vazio = cadastro de atleta com upload de foto.
+# Veja docs/integracao-site-institucional.md. Vazio = o atleta é cadastrado sem foto e o admin envia uma pelo painel.
 INSTITUCIONAL_URL = _env("INSTITUCIONAL_API_URL").rstrip("/")
 INSTITUCIONAL_TOKEN = _env("INSTITUCIONAL_API_TOKEN")
 INSTITUCIONAL_CABECALHO = _env("INSTITUCIONAL_API_HEADER", "Authorization")
@@ -76,8 +76,6 @@ INSTITUCIONAL_CAMPOS_NOME = [c.strip() for c in
 # Servidores extras autorizados a hospedar a foto (CDN), além do host da API. Separados por vírgula.
 INSTITUCIONAL_HOSTS_FOTO = {h.strip().lower() for h in _env("INSTITUCIONAL_PHOTO_HOSTS").split(",") if h.strip()}
 INSTITUCIONAL_TIMEOUT = max(2, _int("INSTITUCIONAL_API_TIMEOUT", 10))
-# Origem da foto no cadastro público: "institucional" (pela matrícula) ou "upload" (foto enviada ao Cloudinary).
-ATLETAS_FOTO = _env("ATLETAS_PHOTO_SOURCE").lower() or ("institucional" if INSTITUCIONAL_URL else "upload")
 
 # Sites autorizados a chamar o worker pelo navegador (contagem de espectadores, cadastro de atletas).
 # Nos emuladores (desenvolvimento) qualquer origem é aceita.

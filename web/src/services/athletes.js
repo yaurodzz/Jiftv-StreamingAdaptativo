@@ -2,6 +2,7 @@ import {
   collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
+import { env } from "../lib/env.js";
 
 // Acesso à coleção `athletes`. As Firestore rules só liberam leitura de docs
 // com status="approved" — então a query com esse where roda sem privilégio.
@@ -78,8 +79,50 @@ export function updateAthlete(id, data) {
   });
 }
 
-// Dados privados (matrícula escolar e nome devolvido pelo site institucional), só para o admin.
-// Mapa { idDoAtleta: { matricula, institutionalName, ... } }.
+// Foto e matrícula passam pelo worker (ele guarda a foto e fala com o site institucional);
+// o worker confere o ID token de admin.
+async function worker(path, { method = "POST", body, headers } = {}) {
+  const token = await auth.currentUser?.getIdToken();
+  let res;
+  try {
+    res = await fetch(`${env.apiUrl}/api/atletas/${path}`, {
+      method, body, headers: { Authorization: `Bearer ${token}`, ...headers },
+    });
+  } catch {
+    throw new Error("Não foi possível falar com o servidor de mídia. Confira se ele está ligado e conectado à internet.");
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(typeof data?.detail === "string" ? data.detail
+      : res.status === 413 ? "A foto precisa ter no máximo 5 MB."
+        : `Erro ${res.status} no servidor de mídia.`);
+  }
+  return data;
+}
+
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+export function validatePhotoFile(file) {
+  if (!file) return "Selecione uma foto.";
+  if (!PHOTO_TYPES.has(file.type)) return "Formato aceito: JPG, PNG ou WebP.";
+  if (file.size > 5 * 1024 * 1024) return "A foto precisa ter no máximo 5 MB.";
+  return null;
+}
+
+// Foto enviada pelo admin, para quando a busca pela matrícula não trouxe foto (ou trouxe a errada).
+export const uploadAthletePhoto = (id, file) =>
+  worker(`${id}/foto`, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+
+// Busca de novo, no site institucional, a foto da matrícula guardada.
+export const fetchInstitutionalPhoto = (id) => worker(`${id}/foto/institucional`);
+
+export const setAthleteMatricula = (id, matricula) =>
+  worker(`${id}/matricula`, {
+    method: "PUT", body: JSON.stringify({ matricula }), headers: { "Content-Type": "application/json" },
+  });
+
+// Dados privados (matrícula escolar, nome devolvido pelo site institucional e resultado da busca
+// da foto), só para o admin. Mapa { idDoAtleta: { matricula, institutionalName, photoStatus, ... } }.
 export function subscribeAthletePrivate(cb, onError) {
   return onSnapshot(
     collection(db, "athletePrivate"),

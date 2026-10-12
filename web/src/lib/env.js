@@ -13,11 +13,4 @@ export const env = {
   apiUrl:   (import.meta.env.VITE_API_URL || mediaUrl).replace(/\/+$/, ""),
   // URL RTMP para o operador copiar no OBS/Larix (não é usada pelo navegador).
   rtmpUrl:  import.meta.env.VITE_RTMP_URL || "rtmp://localhost:1935/live",
-
-  // Cloudinary: usado só pelo cadastro público de atleta (upload direto do navegador).
-  // O preset é UNSIGNED e restrito à pasta jiftv/athletes/pending; ver docs/cloudinary-preset.md.
-  cloudinary: {
-    cloudName:    import.meta.env.VITE_CLOUDINARY_CLOUD_NAME    || "",
-    uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "",
-  },
 };
