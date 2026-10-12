@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from . import armazenamento, cloud, comandos, config, drive, estado, fb, live, recordings, sistema
 from .atletas import router as atletas
 from .camera import router as camera
+from .ponte import router as ponte
 from .rotas_armazenamento import router as rotas_armazenamento
 from .routes import interno, publico
 
@@ -84,4 +85,5 @@ app.include_router(interno)
 app.include_router(publico)
 app.include_router(atletas)
 app.include_router(camera)
+app.include_router(ponte)
 app.include_router(rotas_armazenamento)

@@ -43,6 +43,7 @@ docs/cloudinary-preset.md        preset do Cloudinary (fotos de atletas por uplo
 docs/armazenamento.md            onde as gravações ficam: pasta local, Google Drive, Cloudinary (aba Armazenamento)
 docs/integracao-site-institucional.md   fotos dos atletas pela matrícula, na API do site do professor
 docs/dominio-cloudflare.md       domínio jiftv.org, túnel da Cloudflare, Firebase Hosting, CORS
+docs/obs-pela-internet.md        OBS em outro computador, de qualquer rede (ponte tools/obs-ponte.bat)
 docs/camera-celular.md           transmitir a câmera do celular pelo navegador, de qualquer rede (4G)
 tools/mock_institucional.py      API de mentira do site institucional (só desenvolvimento)
 docker-compose.yml               media, api, emulators (perfil dev), tunnel (perfil tunel)

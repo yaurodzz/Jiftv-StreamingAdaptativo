@@ -68,7 +68,7 @@ export default function StreamConfigCard({ stream }) {
             </button>
           </div>
           {/localhost|127\.0\.0\.1/.test(env.rtmpUrl) && (
-            <p className="mt-1 text-xs">Vale para o OBS no próprio servidor. De outro computador da rede, troque localhost pelo IP do servidor.</p>
+            <p className="mt-1 text-xs">Vale para o OBS no próprio servidor. Em outro computador, abra antes a ponte do OBS (abaixo) e use este mesmo endereço.</p>
           )}
         </li>
         <li>
@@ -96,6 +96,23 @@ export default function StreamConfigCard({ stream }) {
           <Smartphone size={15} /> Transmitir pelo celular
         </Link>
       </div>
+
+      <details className="mt-3 rounded-xl border border-line bg-elevated/40 p-3 text-sm">
+        <summary className="cursor-pointer font-medium text-fg">OBS em outro computador (qualquer rede)</summary>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted">
+          <li>
+            Instale o cloudflared, uma vez só: <code className="break-all font-mono text-xs">winget install --id Cloudflare.cloudflared</code>
+          </li>
+          <li>
+            Antes de transmitir, abra a ponte e deixe a janela aberta (arquivo <code className="font-mono text-xs">tools/obs-ponte.bat</code> do projeto, ou o comando):
+            <code className="mt-1 block break-all font-mono text-xs">cloudflared access tcp --hostname {env.apiUrl}/api/rtmp --url 127.0.0.1:1935</code>
+          </li>
+          <li>
+            No OBS, use o servidor <code className="font-mono text-xs">rtmp://localhost:1935/live</code> e a chave acima.
+          </li>
+        </ol>
+        <p className="mt-2 text-xs text-muted">Funciona no 4G e em redes que bloqueiam a porta 1935. Na mesma rede do servidor também dá para trocar localhost pelo IP dele, sem ponte.</p>
+      </details>
 
       <details className="mt-3 rounded-xl border border-line bg-elevated/40 p-3 text-sm">
         <summary className="cursor-pointer font-medium text-fg">Larix Broadcaster (aplicativo)</summary>

@@ -29,7 +29,7 @@ services:
       - /var/www/thumbs:mode=1777
 
   # Worker (Python): liga o servidor de mídia ao Firebase.
-  # Valida as chaves do OBS, recebe a câmera do celular (WebSocket -> FFmpeg -> RTMP do "media"),
+  # Valida as chaves do OBS, recebe a câmera do celular e o OBS de fora (WebSocket -> RTMP do "media"),
   # marca transmissões ao vivo, registra as gravações no
   # Firestore, envia ao Google Drive e ao Cloudinary e executa os pedidos do painel.
   # Só faz conexões de saída para o Firebase: funciona atrás do roteador da escola.

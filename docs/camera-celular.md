@@ -1,7 +1,7 @@
 # Câmera do celular pela internet (4G), sem depender de localhost
 
 Criado em **2026-10-11**. Estado: **servidor no ar** (containers recriados em 2026-10-11, rota conferida pelo
-túnel); **falta republicar o site** (veja "Para colocar no ar") e testar com um celular real.
+túnel); site republicado pelo usuário, que transmitiu pelo celular em 2026-10-11 e relatou que "ficou boa".
 
 ## O problema
 
@@ -86,7 +86,7 @@ ou com bateria; se aparecer o aviso de internet lenta, parar e escolher uma qual
    pela internet: `wss://api.jiftv.org/api/camera/<id>` e `wss://live.jiftv.org/api/camera/<id>` aceitam o
    WebSocket e recusam um token inválido com a mensagem do worker. Em outro servidor, repita o comando
    (ele derruba por alguns segundos a transmissão que estiver no ar).
-2. **Site** (**pendente**; `web/dist` já está construído com a tela nova): `cd web && npm run build && cd .. && firebase deploy --only hosting` com a conta dona do projeto
+2. **Site** (**feito pelo usuário em 2026-10-11**): `cd web && npm run build && cd .. && firebase deploy --only hosting` com a conta dona do projeto
    `jiftv-stream` (veja [dominio-cloudflare.md](dominio-cloudflare.md)). Sem isso a tela nova não existe em `jiftv.org`.
 3. **Painel da Cloudflare**: nenhuma mudança. As rotas `live.` e `api.` já apontam para `media:80`, e WebSocket
    vem ligado por padrão (Network → WebSockets, na zona `jiftv.org`).
@@ -105,7 +105,10 @@ WebSocket **através do nginx** um vídeo gerado pelo FFmpeg em pedaços, como o
 
 A passagem do WebSocket pelo túnel da Cloudflare foi conferida em 2026-10-11 (só a recusa de token, sem vídeo).
 
-**Não testado**: um celular de verdade (Chrome no Android, Safari no iPhone), vídeo passando pelo túnel
+Em 2026-10-11 o usuário transmitiu de um celular real e relatou que a transmissão ficou boa (aparelho, navegador
+e rede não foram informados).
+
+**Não testado por mim**: Chrome no Android e Safari no iPhone separadamente, vídeo passando pelo túnel
 e a rede 4G. A tela nova passou no `vite build`, mas não foi aberta em navegador com câmera. O primeiro teste de
 campo deve conferir: imagem e som no site, o `Vídeo no servidor: Direto`, e a reconexão ao desligar e ligar os
 dados móveis. Se a imagem chegar travada, marcar **Modo compatível**.
@@ -124,6 +127,7 @@ O túnel HTTP não leva RTMP, SRT nem o tráfego de mídia do WebRTC/WHIP (UDP).
 
 | Opção | Como | Contras |
 |---|---|---|
+| **Ponte do OBS** (desde 2026-10-11) | No computador do OBS, `cloudflared access tcp` leva o RTMP por WebSocket até `/api/rtmp`. Veja [obs-pela-internet.md](obs-pela-internet.md) | Só para computador (o celular não roda o cloudflared) |
 | **Tailscale** (VPN gratuita) | Instalar no servidor e no celular com a mesma conta; no Larix usar `rtmp://<IP 100.x do servidor>:1935/live/<chave>` | Aplicativo a mais no celular, sempre ligado; a rede do IFSC pode forçar o tráfego por retransmissor (mais lento) |
 | Porta 1935 aberta pela TI | Encaminhar 1935 para o servidor e criar `rtmp.jiftv.org` **sem proxy** apontando para o IP público | Depende da TI; expõe a porta à internet (a chave protege a publicação) |
 | Cloudflare Spectrum | Proxy TCP da Cloudflare para a 1935 | Pago |
