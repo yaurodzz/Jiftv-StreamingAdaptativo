@@ -50,6 +50,9 @@ Em **Painel → Atletas → Editar** (qualquer aba: pendentes, aprovados, rejeit
 - **Enviar foto / Trocar foto**: escolhe um arquivo (JPEG, PNG ou WebP, até 5 MB), que é enviado ao salvar.
   Rota `PUT /api/atletas/{id}/foto` (corpo = a imagem). O worker confere o tipo pelos bytes e guarda no mesmo
   lugar das fotos da instituição; o perfil fica com `photoSource: "admin"`.
+- **Também joga em…**: copia o atleta para outra modalidade, com a mesma matrícula, foto e nome conferido.
+  Rota `POST /api/atletas/{id}/modalidades`. No cadastro público, marcar várias modalidades cria uma cópia por
+  modalidade e a foto é buscada na instituição uma vez só.
 - **Matrícula escolar**: corrige um erro de digitação ou informa a matrícula de um atleta antigo que não tinha.
   Rota `PUT /api/atletas/{id}/matricula` (recusa com 409 se outro cadastro ativo da modalidade já usa a matrícula).
 - **Buscar pela matrícula**: salva a matrícula do campo (se mudou) e consulta a instituição de novo. Rota

@@ -13,13 +13,16 @@ import { computeAge } from "../features/athletes/format.js";
 // busca a foto na API do site institucional. Se a busca não der certo, o cadastro entra sem
 // foto e o admin adiciona uma pelo painel (Atletas → Editar).
 //
+// Quem joga mais de um esporte marca todas as modalidades: o worker cria um perfil por
+// modalidade (mesmos dados, foto e matrícula), e o atleta aparece em todas na vitrine.
+//
 // Validações client-side espelham as do servidor — ele segue sendo a fonte de verdade,
 // mas evitamos requests inúteis.
 
 const INITIAL = {
   name: "", nickname: "", birthDate: "",
   jerseyNumber: "", position: "", bio: "",
-  modalityCode: "", classId: "", matricula: "",
+  modalityCodes: [], classId: "", matricula: "",
   submittedByName: "", submittedByEmail: "",
 };
 
@@ -39,6 +42,10 @@ export default function AthleteSubmit() {
   useEffect(() => { document.title = "Cadastrar atleta · JIFTv"; }, []);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const toggleModality = (code) => setForm((f) => ({
+    ...f,
+    modalityCodes: f.modalityCodes.includes(code) ? f.modalityCodes.filter((c) => c !== code) : [...f.modalityCodes, code],
+  }));
   const age = computeAge(form.birthDate);
 
   const localError = useMemo(() => {
@@ -46,7 +53,7 @@ export default function AthleteSubmit() {
     if (!MATRICULA.test(form.matricula.trim())) return "Informe a matrícula do aluno (só letras e números, de 4 a 20).";
     if (!form.birthDate) return "Informe a data de nascimento.";
     if (age == null || age < 8 || age > 80) return "Data de nascimento fora da faixa aceita.";
-    if (!form.modalityCode) return "Escolha a modalidade.";
+    if (form.modalityCodes.length === 0) return "Escolha pelo menos uma modalidade.";
     if (!form.classId) return "Escolha a turma.";
     if (form.submittedByEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.submittedByEmail))
       return "E-mail de contato inválido.";
@@ -67,7 +74,9 @@ export default function AthleteSubmit() {
         jerseyNumber: form.jerseyNumber ? Number(form.jerseyNumber) : undefined,
         position: form.position.trim() || undefined,
         bio: form.bio.trim() || undefined,
-        modalityCode: form.modalityCode,
+        // modalityCode vai junto para o worker antigo (antes do rebuild do api), que aceita uma só
+        modalityCode: form.modalityCodes[0],
+        modalityCodes: form.modalityCodes,
         classId: form.classId,
         submittedByName:  form.submittedByName.trim()  || undefined,
         submittedByEmail: form.submittedByEmail.trim() || undefined,
@@ -157,15 +166,31 @@ export default function AthleteSubmit() {
           <Field label="Número">
             <input type="number" inputMode="numeric" pattern="[0-9]*" min={0} max={999} value={form.jerseyNumber} onChange={set("jerseyNumber")} autoComplete="off" enterKeyHint="next" className="input" />
           </Field>
-          <Field label="Modalidade *">
-            <select value={form.modalityCode} onChange={set("modalityCode")} required className="input">
-              <option value="">Escolher…</option>
-              {modalities.map((m) => (
-                <option key={m.id} value={m.code}>{m.code} — {m.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Turma *">
+          <fieldset className="sm:col-span-2">
+            <legend className="text-sm font-medium text-fg">Modalidades *</legend>
+            <p className="mt-0.5 text-xs text-muted">Marque todas em que o atleta joga. Ele aparece em cada uma delas.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {modalities.map((m) => {
+                const on = form.modalityCodes.includes(m.code);
+                return (
+                  <label
+                    key={m.id}
+                    className={"inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm max-md:min-h-11 " +
+                      (on ? "border-accent bg-accent/10 text-fg" : "border-line text-muted hover:text-fg")}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => toggleModality(m.code)}
+                      className="h-4 w-4 accent-[rgb(var(--accent))]"
+                    />
+                    {m.name}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          <Field label="Turma *" full>
             <select value={form.classId} onChange={set("classId")} required className="input">
               <option value="">Escolher…</option>
               {classes.map((c) => (

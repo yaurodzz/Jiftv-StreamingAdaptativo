@@ -13,6 +13,12 @@ Painel (ID token de admin em "Authorization: Bearer ..."):
 - PUT  /api/atletas/{id}/foto                 o admin envia uma foto (corpo = a imagem)
 - POST /api/atletas/{id}/foto/institucional   busca de novo a foto pela matrícula
 - PUT  /api/atletas/{id}/matricula            corrige (ou informa) a matrícula
+- POST /api/atletas/{id}/modalidades          copia o atleta para outra modalidade
+
+Atleta em mais de uma modalidade: cada modalidade é um documento próprio em `athletes` (uma "cópia" do mesmo
+aluno, com a mesma matrícula em athletePrivate). Assim ele aparece em todas as modalidades na vitrine, nos
+elencos e no scout sem mudar o resto do sistema. O cadastro público aceita várias modalidades de uma vez
+(modalityCodes) e cria uma cópia por modalidade; o painel cria cópias depois.
 
 Validação estrita, limite de envios por IP e o servidor SEMPRE grava status="pending", submittedAt e
 submittedIp (nunca vêm do cliente). O perfil só aparece no site depois que um admin aprova.
@@ -41,6 +47,7 @@ _envios = {}                  # ip -> [instantes]
 _lock = threading.Lock()
 
 FOTOS_LOCAIS = config.RECORDINGS / "fotos"
+MODALIDADE = re.compile(r"^[A-Z]{3}$")
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 ID_ATLETA = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -69,7 +76,8 @@ class Cadastro(BaseModel):
     jerseyNumber: int | None = Field(None, ge=0, le=999)
     position: str | None = Field(None, max_length=40)
     bio: str | None = Field(None, max_length=400)
-    modalityCode: str = Field(pattern=r"^[A-Z]{3}$")
+    modalityCode: str | None = Field(None, pattern=r"^[A-Z]{3}$")       # versões antigas do site: uma só
+    modalityCodes: list[str] | None = Field(None, min_length=1, max_length=10)
     classId: str = Field(min_length=1, max_length=100)
     submittedByName: str | None = Field(None, max_length=60)
     submittedByEmail: str | None = Field(None, max_length=120)
@@ -99,6 +107,21 @@ class Cadastro(BaseModel):
         if v and not EMAIL.match(v):
             raise ValueError("e-mail inválido")
         return v or None
+
+    @field_validator("modalityCodes")
+    @classmethod
+    def _modalidades(cls, v):
+        if v and any(not MODALIDADE.match(c or "") for c in v):
+            raise ValueError("código de modalidade inválido")
+        return v
+
+    def codigos(self):
+        """Modalidades pedidas, sem repetição e na ordem enviada."""
+        return list(dict.fromkeys(self.modalityCodes or ([self.modalityCode] if self.modalityCode else [])))
+
+
+class NovaModalidade(BaseModel):
+    modalityCode: str = Field(pattern=r"^[A-Z]{3}$")
 
 
 class Matricula(BaseModel):
@@ -193,59 +216,69 @@ def configuracao():
     return {"origem": "institucional"}
 
 
+def _modalidade(db, codigo):
+    achadas = list(db.collection("modalities").where(filter=FieldFilter("code", "==", codigo)).limit(1).stream())
+    if not achadas:
+        raise HTTPException(400, f"Modalidade {codigo} não encontrada.")
+    return achadas[0].to_dict()
+
+
 @router.post("/atletas", status_code=201)
 def cadastrar(corpo: Cadastro, request: Request):
     ip = _ip(request)
     _limitar(ip)
+    codigos = corpo.codigos()
+    if not codigos:
+        raise HTTPException(400, "Escolha pelo menos uma modalidade.")
 
     db = fb.db()
-    modalidades = list(db.collection("modalities")
-                       .where(filter=FieldFilter("code", "==", corpo.modalityCode)).limit(1).stream())
-    if not modalidades:
-        raise HTTPException(400, "Modalidade não encontrada.")
+    modalidades = {c: _modalidade(db, c) for c in codigos}
     turma = db.collection("classes").document(corpo.classId).get()
     if not turma.exists:
         raise HTTPException(400, "Turma não encontrada.")
-    if _ja_cadastrada(db, corpo.matricula, corpo.modalityCode):
-        raise HTTPException(409, "Esta matrícula já tem um cadastro nesta modalidade.")
+    repetidas = [c for c in codigos if _ja_cadastrada(db, corpo.matricula, c)]
+    if repetidas:
+        raise HTTPException(409, f"Esta matrícula já tem um cadastro em: {', '.join(repetidas)}. "
+                                 "Tire essa modalidade e envie de novo.")
 
-    ref = db.collection("athletes").document()
-    foto, privado = _foto_institucional(ref.id, corpo.matricula)
-    foto = {k: v for k, v in foto.items() if v is not fb.DELETE_FIELD}  # documento novo: nada a apagar
+    # Uma cópia do atleta por modalidade. A foto é buscada uma vez e reaproveitada nas outras cópias.
+    refs = [db.collection("athletes").document() for _ in codigos]
+    foto, privado = _foto_institucional(refs[0].id, corpo.matricula)
+    foto = {k: v for k, v in foto.items() if v is not fb.DELETE_FIELD}  # documentos novos: nada a apagar
 
-    modalidade = modalidades[0].to_dict()
     t = turma.to_dict()
     lote = db.batch()
-    lote.set(ref, {
-        "name": corpo.name,
-        "nickname": corpo.nickname or None,
-        "birthDate": corpo.birthDate,
-        "photoSource": None,
-        **foto,
-        "jerseyNumber": corpo.jerseyNumber,
-        "position": corpo.position or None,
-        "bio": corpo.bio or None,
-        "modalityCode": corpo.modalityCode,
-        "modalityName": modalidade.get("name"),
-        "classId": corpo.classId,
-        "className": t.get("name"),
-        "classCampus": t.get("campus") or None,
-        "submittedByName": corpo.submittedByName or None,
-        "submittedByEmail": corpo.submittedByEmail,
-        # Campos travados no servidor
-        "status": "pending",
-        "submittedAt": fb.SERVER_TIMESTAMP,
-        "submittedIp": ip,
-        "approvedAt": None,
-        "approvedBy": None,
-    })
-    lote.set(db.collection("athletePrivate").document(ref.id),
-             {"matricula": corpo.matricula, "modalityCode": corpo.modalityCode, **privado})
+    for ref, codigo in zip(refs, codigos):
+        lote.set(ref, {
+            "name": corpo.name,
+            "nickname": corpo.nickname or None,
+            "birthDate": corpo.birthDate,
+            "photoSource": None,
+            **foto,
+            "jerseyNumber": corpo.jerseyNumber,
+            "position": corpo.position or None,
+            "bio": corpo.bio or None,
+            "modalityCode": codigo,
+            "modalityName": modalidades[codigo].get("name"),
+            "classId": corpo.classId,
+            "className": t.get("name"),
+            "classCampus": t.get("campus") or None,
+            "submittedByName": corpo.submittedByName or None,
+            "submittedByEmail": corpo.submittedByEmail,
+            # Campos travados no servidor
+            "status": "pending",
+            "submittedAt": fb.SERVER_TIMESTAMP,
+            "submittedIp": ip,
+            "approvedAt": None,
+            "approvedBy": None,
+        })
+        lote.set(db.collection("athletePrivate").document(ref.id),
+                 {"matricula": corpo.matricula, "modalityCode": codigo, **privado})
     lote.commit()
     sem_foto = "" if foto else " (sem foto: confira no painel)"
-    fb.evento("atleta", f"Novo cadastro de atleta aguardando aprovação: {corpo.name} ({corpo.modalityCode}){sem_foto}")
+    fb.evento("atleta", f"Novo cadastro de atleta aguardando aprovação: {corpo.name} ({', '.join(codigos)}){sem_foto}")
     # A resposta é a mesma com ou sem foto: o formulário público não revela quais matrículas existem
-    return {"id": ref.id, "status": "pending"}
+    return {"id": refs[0].id, "ids": [r.id for r in refs], "status": "pending"}
 
 
 # ------------------------------------------------------------------ painel
@@ -325,3 +358,34 @@ def buscar_foto(athlete_id: str):
     lote.set(privado, resultado, merge=True)
     lote.commit()
     return {"photoStatus": "ok", "institutionalName": resultado.get("institutionalName")}
+
+
+# Campos de um atleta que a cópia para outra modalidade NÃO leva (são da modalidade ou do cadastro original)
+NAO_COPIAR = {"modalityCode", "modalityName", "modality", "rejectedAt", "rejectedBy", "rejectionReason"}
+
+
+@router.post("/atletas/{athlete_id}/modalidades", status_code=201, dependencies=admin)
+def copiar_para_modalidade(athlete_id: str, corpo: NovaModalidade):
+    """Cria a cópia do atleta em outra modalidade (mesmos dados, foto e matrícula)."""
+    db = fb.db()
+    _ref, atleta = _atleta(db, athlete_id)
+    modalidade = _modalidade(db, corpo.modalityCode)
+    if atleta.get("modalityCode") == corpo.modalityCode:
+        raise HTTPException(409, "O atleta já está nesta modalidade.")
+    privado = db.collection("athletePrivate").document(athlete_id).get().to_dict() or {}
+    matricula = privado.get("matricula")
+    if matricula and _ja_cadastrada(db, matricula, corpo.modalityCode):
+        raise HTTPException(409, "Esta matrícula já tem um cadastro nesta modalidade.")
+
+    nova = db.collection("athletes").document()
+    dados = {k: v for k, v in atleta.items() if k not in NAO_COPIAR}
+    # Rejeitado não vira modelo: a cópia entra na fila. Aprovado ou pendente continua igual.
+    status = "pending" if atleta.get("status") == "rejected" else atleta.get("status", "pending")
+    lote = db.batch()
+    lote.set(nova, {**dados, "modalityCode": corpo.modalityCode, "modalityName": modalidade.get("name"),
+                    "status": status, "copiedFrom": athlete_id})
+    lote.set(db.collection("athletePrivate").document(nova.id),
+             {**privado, "modalityCode": corpo.modalityCode})
+    lote.commit()
+    fb.evento("atleta", f"{atleta.get('name')} também em {corpo.modalityCode} (cópia criada no painel)")
+    return {"id": nova.id, "status": status}

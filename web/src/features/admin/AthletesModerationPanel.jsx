@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  approveAthlete, deleteAthlete, fetchInstitutionalPhoto, rejectAthlete, setAthleteMatricula, subscribeAthletePrivate,
+  addAthleteModality, approveAthlete, deleteAthlete, fetchInstitutionalPhoto, rejectAthlete, setAthleteMatricula, subscribeAthletePrivate,
   subscribeAthletesAdmin, updateAthlete, uploadAthletePhoto, validatePhotoFile,
 } from "../../services/athletes.js";
 import { athletePhoto } from "../../lib/media.js";
+import { subscribeModalities } from "../../services/modalities.js";
 import { computeAge, classLine } from "../athletes/format.js";
 import FormDialog from "./FormDialog.jsx";
 import { useToast } from "./ToastProvider.jsx";
@@ -153,6 +154,7 @@ export default function AthletesModerationPanel({ onPendingCount }) {
       <EditAthleteDialog
         athlete={editing && (list?.find((a) => a.id === editing.id) || editing)}
         priv={editing ? priv[editing.id] : null}
+        allPriv={priv}
         onClose={() => setEditing(null)}
       />
     </div>
@@ -176,7 +178,7 @@ function photoIssue(athlete, priv) {
 }
 
 // Correção de dados, da matrícula e da foto (erros de digitação, foto que não veio da instituição…).
-function EditAthleteDialog({ athlete, priv, onClose }) {
+function EditAthleteDialog({ athlete, priv, allPriv, onClose }) {
   const toast = useToast();
   const [form, setForm] = useState({ name: "", nickname: "", jerseyNumber: "", position: "", bio: "", matricula: "" });
   const [file, setFile] = useState(null);
@@ -298,6 +300,7 @@ function EditAthleteDialog({ athlete, priv, onClose }) {
             <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" onChange={pickFile} className="hidden" />
           </div>
         </div>
+        {athlete && <ModalitiesSection athlete={athlete} priv={priv} allPriv={allPriv} />}
         <label className="sm:col-span-2">
           <span className="label">Nome completo *</span>
           <input className="input" value={form.name} onChange={set("name")} minLength={2} maxLength={60} required />
@@ -324,6 +327,65 @@ function EditAthleteDialog({ athlete, priv, onClose }) {
         </label>
       </div>
     </FormDialog>
+  );
+}
+
+// Modalidades do atleta. Cada modalidade é um perfil próprio (uma cópia do mesmo aluno, ligada pela
+// matrícula), então "Também joga em" cria a cópia na outra modalidade pelo worker.
+function ModalitiesSection({ athlete, priv, allPriv }) {
+  const toast = useToast();
+  const [modalities, setModalities] = useState([]);
+  const [code, setCode] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => subscribeModalities(setModalities), []);
+
+  const matricula = priv?.matricula;
+  const codes = [...new Set([
+    athlete.modalityCode,
+    ...(matricula ? Object.values(allPriv || {}).filter((p) => p.matricula === matricula).map((p) => p.modalityCode) : []),
+  ].filter(Boolean))];
+  const nameOf = (c) => modalities.find((m) => m.code === c)?.name || c;
+  const available = modalities.filter((m) => m.code && !codes.includes(m.code));
+
+  const add = async () => {
+    setAdding(true);
+    try {
+      await addAthleteModality(athlete.id, code);
+      toast.success(`${athlete.name} também está em ${nameOf(code)}`);
+      setCode("");
+    } catch (err) {
+      toast.error(err.message || "Não foi possível adicionar a modalidade.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <div className="sm:col-span-2">
+      <span className="label">Modalidades</span>
+      <div className="flex flex-wrap gap-1.5">
+        {codes.map((c) => (
+          <span key={c} className={"badge " + (c === athlete.modalityCode ? "bg-accent/10 text-accent" : "border border-line text-fg")}>
+            {nameOf(c)}{c === athlete.modalityCode && " (este perfil)"}
+          </span>
+        ))}
+      </div>
+      {available.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <select className="input min-w-0 flex-1 basis-48" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Outra modalidade do atleta">
+            <option value="">Também joga em…</option>
+            {available.map((m) => <option key={m.id} value={m.code}>{m.name}</option>)}
+          </select>
+          <button type="button" disabled={!code || adding} onClick={add} className="btn-ghost btn-sm disabled:opacity-60">
+            {adding ? "Adicionando…" : "Adicionar"}
+          </button>
+        </div>
+      )}
+      <p className="mt-1 text-xs text-muted">
+        Cria um perfil do mesmo atleta na outra modalidade, com os mesmos dados, foto e matrícula. Depois cada perfil é editado separado.
+      </p>
+    </div>
   );
 }
 

@@ -116,6 +116,13 @@ export const uploadAthletePhoto = (id, file) =>
 // Busca de novo, no site institucional, a foto da matrícula guardada.
 export const fetchInstitutionalPhoto = (id) => worker(`${id}/foto/institucional`);
 
+// Atleta que joga mais de um esporte: cria a cópia dele em outra modalidade (mesmos dados, foto e
+// matrícula). Cada modalidade é um perfil próprio, então ele aparece em todas na vitrine.
+export const addAthleteModality = (id, modalityCode) =>
+  worker(`${id}/modalidades`, {
+    body: JSON.stringify({ modalityCode }), headers: { "Content-Type": "application/json" },
+  });
+
 export const setAthleteMatricula = (id, matricula) =>
   worker(`${id}/matricula`, {
     method: "PUT", body: JSON.stringify({ matricula }), headers: { "Content-Type": "application/json" },

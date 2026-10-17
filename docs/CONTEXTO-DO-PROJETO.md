@@ -47,6 +47,11 @@ no projeto de referência `StreamingAdaptativo.zip` (React + Vite + Tailwind, "T
 
 Decisões mais recentes do usuário:
 
+- **Atleta em mais de uma modalidade** (2026-10-17): o usuário aceitou **duplicar o atleta**. Cada modalidade
+  é um documento próprio em `athletes` (mesmos dados, foto e matrícula; a matrícula liga as cópias em
+  `athletePrivate`), e o atleta aparece em todas as modalidades na vitrine, nos elencos e no scout. O cadastro
+  público aceita várias modalidades de uma vez; o painel cria cópias depois ("Também joga em…" em Editar).
+  Cada cópia é editada separadamente (trocar a foto de uma não muda a outra).
 - **Elenco por transmissão** (2026-10-12): cada transmissão pode ter um elenco, escolhido entre os atletas
   aprovados e separado por equipe (A/B). É opcional na criação da transmissão e editado depois no cartão
   "Elenco" da página dela no painel. O site mostra foto, nome e número de cada atleta abaixo do vídeo
@@ -252,7 +257,7 @@ Jiftv-Streaming-Adaptativo/
 | `streamKeys/{streamId}` | painel | `streamKey` (20 chars Crockford base32). **Só admin lê** |
 | `vods` | worker + painel | ID `AAAAMMDD-COD-HHMMSS`. `title`, `modality*`, `recordedAt`, `durationSec`, `width/height`, `bytes`, `localFile`, `localThumb`, `localAvailable`, `visible`, `views`, `playbackUrl`/`thumbnailUrl` (Cloudinary), `cloudinary{status,error,attempts,nextAttemptAt,publicId,secureUrl}`, `drive{status,fileId,thumbId,infoId,webViewLink,bytes,md5,progress,error,attempts,nextAttemptAt}`, `localRemovedAt`, `sourceStreamId`, `streamSlug`, `teamA/B`, `scoreA/B` |
 | `athletePrivate/{athleteId}` | worker | `matricula`, `modalityCode`, `institutionalName` (nome devolvido pela API), `verifiedAt`, `photoStatus` (`ok`, ou por que ficou sem foto: `nao_configurada`/`nao_encontrada`/`sem_foto`/`erro`). Criado em todo cadastro. **Só admin lê/apaga**; a matrícula é corrigida pelo worker |
-| `athletes` | worker (cadastro) + painel | `name`, `nickname`, `birthDate`, `photoUrl` (Cloudinary) **ou** `photoPath` (`fotos/<id>.<ext>`, servido pelo media), (os dois ausentes = sem foto), `photoSource` (`institucional`/`admin`/`null`; `upload` só em cadastros antigos), `jerseyNumber`, `position`, `bio`, `modalityCode/Name`, `classId/Name/Campus`, `status` (`pending`/`approved`/`rejected`), `submittedAt/Ip/ByName/ByEmail`, `approvedAt/By`, `rejectedAt/By/Reason` |
+| `athletes` | worker (cadastro) + painel | `name`, `nickname`, `birthDate`, `photoUrl` (Cloudinary) **ou** `photoPath` (`fotos/<id>.<ext>`, servido pelo media), (os dois ausentes = sem foto), `photoSource` (`institucional`/`admin`/`null`; `upload` só em cadastros antigos), `jerseyNumber`, `position`, `bio`, `modalityCode/Name`, `classId/Name/Campus`, `status` (`pending`/`approved`/`rejected`), `submittedAt/Ip/ByName/ByEmail`, `approvedAt/By`, `rejectedAt/By/Reason`, `copiedFrom` (id do perfil de origem, quando a cópia foi criada no painel) |
 | `scoutEvents` | painel | `matchId` (id do vod), `matchType`, `athleteId/Name`, `modalityCode`, `type`, `value`, `videoTime`, `note`, `createdAt/By` |
 | `system/server` | worker | estado do servidor a cada 20 s: `lastSeen`, `media{...}`, `disk`, `recordings`, `cloudinary`, `storage{local,drive,cloudinary}`, `institutional{configured,host,mode,lastAt,lastOk,lastError}`, `qualities`, `viewers` |
 | `events` | worker | histórico exibido no painel (`type`, `message`, `at`) |
@@ -301,6 +306,17 @@ Gravações ocultas só abrem com `?token=<ID token de admin>` (nginx `auth_requ
 
 **Excluir gravação / ler logs / reverificar pasta**: painel cria documento em `commands`; worker executa.
 
+**Atleta em várias modalidades** (2026-10-17): o formulário tem uma caixa por modalidade e manda
+`modalityCodes` (e `modalityCode` com a primeira, para o worker antigo). O worker cria um documento por modalidade
+no mesmo lote, busca a foto uma vez e reaproveita nas outras cópias, e recusa com 409 as modalidades em que a
+matrícula já tem cadastro ativo. No painel, Atletas → Editar → "Modalidades" lista as modalidades do atleta
+(pelos `athletePrivate` com a mesma matrícula) e "Também joga em…" chama `POST /api/atletas/{id}/modalidades`,
+que copia o perfil (status igual ao original; rejeitado vira pendente) e o `athletePrivate`. Scout continua por
+perfil, então as estatísticas ficam separadas por modalidade. **Não testado rodando**: só o build do site e a
+compilação do Python; o Docker não respondia em 2026-10-17. Vale depois de `docker compose up -d --build --no-deps api`
+(fora de transmissão ao vivo) e de publicar o site; com o worker antigo, o formulário novo cadastra só a
+primeira modalidade marcada e o botão do painel falha.
+
 **Cadastro de atleta** (reformulado em 2026-10-12): o formulário não envia foto; a pessoa informa os dados e a
 **matrícula** (obrigatória) → `POST /api/atletas` → o worker valida, consulta a API do site institucional, guarda
 a foto (Cloudinary, ou `gravacoes/fotos/`) e grava `athletes/{id}` (público após aprovar) + `athletePrivate/{id}`
@@ -335,7 +351,7 @@ clicar no evento (grava `videoTime`). Tipos de evento por modalidade em Painel �
 Rotas do site: `/live`, `/live/:slug`, `/catalogo`, `/partidas/:id`, `/atletas`, `/atletas/novo`,
 `/atletas/:id`, `/admin/login`, `/admin` (visão geral), `/admin/{transmissoes,transmissoes/:id,gravacoes,armazenamento,
 atletas,modalidades,turmas,sistema}`, `/scout/:vodId`. Rotas do worker: `/internal/{publish,publish_done,gravacao}`
-(só rede interna), `/api/{saude,audiencia,arquivo-auth,atletas}`, `/api/atletas/{id}/{foto,foto/institucional,matricula}` (admin; no
+(só rede interna), `/api/{saude,audiencia,arquivo-auth,atletas}`, `/api/atletas/{id}/{foto,foto/institucional,matricula,modalidades}` (admin; no
 nginx, `location ^~ /api/atletas/` aceita corpo de até 6 MB, o resto de `/api/` segue em 16k; o cadastro público tem
 um `location = /api/atletas` exato, senão o nginx responde 301 e o CORS bloqueia), e as do armazenamento:
 `/api/armazenamento`, `/api/armazenamento/pastas`, `/api/drive/{conectar,callback,desconectar}`, `/api/video/<id>`.

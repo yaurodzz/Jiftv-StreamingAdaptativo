@@ -68,7 +68,7 @@ app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGENS, allow_meth
 
 NOMES_CAMPOS = {
     "name": "nome", "nickname": "apelido", "birthDate": "data de nascimento",
-    "jerseyNumber": "número", "position": "posição", "bio": "bio", "modalityCode": "modalidade",
+    "jerseyNumber": "número", "position": "posição", "bio": "bio", "modalityCode": "modalidade", "modalityCodes": "modalidades",
     "classId": "turma", "matricula": "matrícula", "submittedByName": "seu nome", "submittedByEmail": "seu e-mail",
 }
 

@@ -164,6 +164,9 @@ token do admin, tanto no Firestore (regras) quanto no servidor de mídia (`auth_
   aba mostra quantos cadastros esperam aprovação. O painel mostra a matrícula, avisa quando o nome digitado não
   bate com o do cadastro institucional e marca "Sem foto" com o motivo. Em **Editar** o admin corrige os dados
   e a matrícula, **envia ou troca a foto** (JPEG, PNG ou WebP, até 5 MB) e pode buscar de novo a foto pela matrícula.
+- **Atleta em mais de uma modalidade**: no cadastro, marque todas as modalidades; em Painel → Atletas → Editar,
+  "Também joga em…" adiciona outra depois. Cada modalidade vira um perfil próprio (cópia com os mesmos dados,
+  foto e matrícula), e o atleta aparece em todas na vitrine.
 - **Elenco da transmissão**: ao criar uma transmissão (opcional) ou depois, no cartão "Elenco" da página dela no
   painel, escolha os atletas aprovados de cada equipe. O site mostra foto, nome e número de cada um abaixo do
   vídeo, com link para o perfil.
