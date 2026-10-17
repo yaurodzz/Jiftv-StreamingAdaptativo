@@ -34,6 +34,10 @@ O que a plataforma entrega:
    **scout** (marcação de eventos dos atletas sobre as gravações).
 4. **Painel administrativo** para gerenciar transmissões (chave do OBS, placar, encerrar), gravações,
    atletas, turmas, modalidades e acompanhar o servidor.
+5. **Gráficos no vídeo e controle do OBS** (2026-10-12): placar com cronômetro e tela de escalação desenhados
+   dentro do OBS por uma página do site (`/overlay/<slug>`, fonte "Navegador"), comandados pelo painel da
+   transmissão, que também conecta ao OBS (obs-websocket) para trocar de cena e iniciar/parar. Veja
+   [overlay-obs.md](overlay-obs.md).
 
 Restrições do contexto: projeto de ensino/pesquisa/extensão (código legível, estudantes vão manter),
 rede escolar com banda limitada, servidor atrás do roteador da escola, interface em português do Brasil.
@@ -43,6 +47,10 @@ no projeto de referência `StreamingAdaptativo.zip` (React + Vite + Tailwind, "T
 
 Decisões mais recentes do usuário:
 
+- **Elenco por transmissão** (2026-10-12): cada transmissão pode ter um elenco, escolhido entre os atletas
+  aprovados e separado por equipe (A/B). É opcional na criação da transmissão e editado depois no cartão
+  "Elenco" da página dela no painel. O site mostra foto, nome e número de cada atleta abaixo do vídeo
+  (e na página de espera, antes de o jogo começar). Os gráficos do OBS leem o mesmo elenco.
 - **Fotos dos atletas vêm de uma API do site institucional** feito pelo professor, que já tem as fotos de todos
   os alunos. O JIFTv consulta essa API pela **matrícula escolar** (o worker faz a chamada). O contrato real da
   API ainda **não foi confirmado**: o JIFTv assume um formato configurável. Detalhes e perguntas para o
@@ -164,6 +172,8 @@ Jiftv-Streaming-Adaptativo/
 │   │                                      kit zip para o professor (JIFTv-API-Fotos-Professor.zip)
 │   ├── dominio-cloudflare.md    jiftv.org, túnel, RTMP, Firebase Hosting, CORS
 │   ├── mobile.md                adaptação do site para celular (abaixo de 768px): diagnóstico e mudanças
+│   ├── overlay-obs.md           gráficos no vídeo (placar, cronômetro, escalação) pela fonte "Navegador" do OBS
+│   │                            e o cartão "Controlar o OBS" (obs-websocket): passo a passo, limites, testes
 │   ├── obs-pela-internet.md     OBS em outro computador, de qualquer rede: ponte /api/rtmp, passo a passo,
 │   │                            celular como câmera do OBS, o que foi testado
 │   ├── camera-celular.md        câmera do celular pelo navegador (4G, sem localhost): como funciona,
@@ -238,7 +248,7 @@ Jiftv-Streaming-Adaptativo/
 |---|---|---|
 | `modalities` | painel | `name`, `code` (3 letras, único), `scoutTypes[{code,label,weight}]` |
 | `classes` | painel | `name`, `campus` |
-| `streams` | painel + worker | painel: `title`, `slug`, modalidade (`modalityId/Code/Name`), `location`, `teamA/B`, `scoreA/B`, `scheduledFor`, `listed`, `keyActive`, `description`. Worker: `isLive`, `startedAt`, `endedAt`, `viewers`, `peakViewers`, `input{width,height,fps,bitrate,codecs}`, `qualitiesActive/Total`, `clientId`, `origin` |
+| `streams` | painel + worker | painel: `title`, `slug`, modalidade (`modalityId/Code/Name`), `location`, `teamA/B`, `scoreA/B`, `scheduledFor`, `listed`, `keyActive`, `description`, `roster` (elenco: `[{ athleteId, team: "A"|"B" }]`, no máximo 60, só os ids; nome, foto e número vêm de `athletes`). Worker: `isLive`, `startedAt`, `endedAt`, `viewers`, `peakViewers`, `input{width,height,fps,bitrate,codecs}`, `qualitiesActive/Total`, `clientId`, `origin` |
 | `streamKeys/{streamId}` | painel | `streamKey` (20 chars Crockford base32). **Só admin lê** |
 | `vods` | worker + painel | ID `AAAAMMDD-COD-HHMMSS`. `title`, `modality*`, `recordedAt`, `durationSec`, `width/height`, `bytes`, `localFile`, `localThumb`, `localAvailable`, `visible`, `views`, `playbackUrl`/`thumbnailUrl` (Cloudinary), `cloudinary{status,error,attempts,nextAttemptAt,publicId,secureUrl}`, `drive{status,fileId,thumbId,infoId,webViewLink,bytes,md5,progress,error,attempts,nextAttemptAt}`, `localRemovedAt`, `sourceStreamId`, `streamSlug`, `teamA/B`, `scoreA/B` |
 | `athletePrivate/{athleteId}` | worker | `matricula`, `modalityCode`, `institutionalName` (nome devolvido pela API), `verifiedAt`, `photoStatus` (`ok`, ou por que ficou sem foto: `nao_configurada`/`nao_encontrada`/`sem_foto`/`erro`). Criado em todo cadastro. **Só admin lê/apaga**; a matrícula é corrigida pelo worker |
@@ -247,6 +257,10 @@ Jiftv-Streaming-Adaptativo/
 | `system/server` | worker | estado do servidor a cada 20 s: `lastSeen`, `media{...}`, `disk`, `recordings`, `cloudinary`, `storage{local,drive,cloudinary}`, `institutional{configured,host,mode,lastAt,lastOk,lastError}`, `qualities`, `viewers` |
 | `events` | worker | histórico exibido no painel (`type`, `message`, `at`) |
 | `commands` | painel → worker | `type` (`delete_vod`/`resync`/`logs`), `payload`, `status` (`pending`/`running`/`done`/`error`), `result`/`error` |
+
+Gráficos do OBS (2026-10-12): `streams/{id}.overlay` = `{ scoreboard, lineup (null/"A"/"B"/"all"), period,
+clock{running,baseMs,startedAt} }`, escrito pelo painel e lido pela página `/overlay/:slug` (rota do site fora da
+casca, sem login). Não mudou nenhuma regra: `streams` já é leitura pública e escrita só de admin.
 
 Resumo das regras (`firestore.rules`, função `isAdmin()` = claim `admin == true`):
 
@@ -299,6 +313,22 @@ ou buscar de novo na instituição (`POST /api/atletas/{id}/foto/institucional`)
 token de admin. Depois o admin aprova → aparece na vitrine. `GET /api/atletas/config` ficou só por
 compatibilidade com versões antigas do site.
 
+**Elenco da transmissão** (2026-10-12): `streams/{id}.roster` guarda só `{ athleteId, team }`. O painel monta o
+elenco com o `RosterEditor` (`web/src/features/admin/`): escolhe a equipe, busca entre os atletas **aprovados**
+(por padrão só os da modalidade da transmissão) e toca para adicionar; dá para trocar de equipe e remover.
+Ele aparece em dois lugares: dobrado no formulário "Nova transmissão" (opcional) e no cartão "Elenco"
+(`StreamRosterCard`) de Painel → Transmissões → a transmissão, que grava com `setRoster()`. "Editar
+transmissão" não mexe no elenco. Sem nomes de equipe a lista é única. Na página pública (`/live` e
+`/live/:slug`, no ar ou esperando) o componente `Roster` (`web/src/features/live/`) lê cada perfil uma vez
+com `getAthlete()` e mostra foto, nome, posição e número, em ordem de camisa, com link para o perfil do atleta.
+Como os dados vêm do perfil, foto trocada no painel aparece sem salvar a transmissão de novo, e atleta
+rejeitado depois some do site sozinho (o painel avisa quantos do elenco não estão mais aprovados). Não houve
+mudança no worker nem nas regras do Firestore. Verificado em 2026-10-12 nos emuladores: criar com elenco,
+editar, trocar de equipe, remover, busca e filtro de modalidade no painel; página pública como visitante
+(esperando e no ar), atleta rejeitado sumindo, 1280 px e 375 px. **Não foi testado com transmissão real nem
+publicado** (falta `npm run build` + `firebase deploy --only hosting`). As gravações (`/partidas/:id`) ainda não
+mostram o elenco.
+
 **Scout**: Painel → Gravações → ícone de prancheta (`/scout/<vodId>`) → escolher atleta, tocar o vídeo e
 clicar no evento (grava `videoTime`). Tipos de evento por modalidade em Painel → Modalidades → Scout.
 
@@ -306,7 +336,8 @@ Rotas do site: `/live`, `/live/:slug`, `/catalogo`, `/partidas/:id`, `/atletas`,
 `/atletas/:id`, `/admin/login`, `/admin` (visão geral), `/admin/{transmissoes,transmissoes/:id,gravacoes,armazenamento,
 atletas,modalidades,turmas,sistema}`, `/scout/:vodId`. Rotas do worker: `/internal/{publish,publish_done,gravacao}`
 (só rede interna), `/api/{saude,audiencia,arquivo-auth,atletas}`, `/api/atletas/{id}/{foto,foto/institucional,matricula}` (admin; no
-nginx, `location ^~ /api/atletas/` aceita corpo de até 6 MB, o resto de `/api/` segue em 16k), e as do armazenamento:
+nginx, `location ^~ /api/atletas/` aceita corpo de até 6 MB, o resto de `/api/` segue em 16k; o cadastro público tem
+um `location = /api/atletas` exato, senão o nginx responde 301 e o CORS bloqueia), e as do armazenamento:
 `/api/armazenamento`, `/api/armazenamento/pastas`, `/api/drive/{conectar,callback,desconectar}`, `/api/video/<id>`.
 
 ---
@@ -341,9 +372,20 @@ Tudo abaixo foi executado nos **emuladores locais** com um FFmpeg simulando o OB
   **Atenção: esses testes são do fluxo antigo.** A reforma de 2026-10-12 (cadastro sem foto, matrícula
   obrigatória, foto pelo painel) só teve verificados o build do site (`npm run build`), a compilação do Python
   e o formulário público renderizado em `localhost:5173`. O Docker estava desligado: **o worker novo, as três
-  rotas de admin, o diálogo Editar com envio de foto e o limite novo do nginx ainda não rodaram**. Para valer é
-  preciso `docker compose up -d --build api` e recarregar o nginx do `media` (fora de uma transmissão ao vivo),
-  e publicar o site de novo (`firebase deploy --only hosting`).
+  rotas de admin, o diálogo Editar com envio de foto e o limite novo do nginx ainda não rodaram**.
+  **Situação no fim de 2026-10-12: tudo no ar.** O `api` e o `media` foram reconstruídos e o site foi publicado
+  (cadastro por matrícula, elenco por transmissão e gráficos do OBS juntos). O `nginx.conf` é copiado para
+  dentro da imagem (`server/Dockerfile`): mudou o nginx, é `docker compose up -d --build --no-deps media`,
+  **fora de uma transmissão ao vivo** (reinicia o servidor de vídeo); recarregar o nginx não basta.
+  **Erro que foi ao ar por cerca de meia hora (20:32 a 21:00): o cadastro público parou.** O
+  `location ^~ /api/atletas/` novo fazia o nginx responder 301 em `/api/atletas` e o navegador bloqueava o envio
+  (preflight de CORS). Corrigido em `server/nginx/nginx.conf` com um `location = /api/atletas` exato nos dois
+  `server`, testado antes numa cópia isolada do container e conferido depois em `http://localhost:8080` e em
+  `https://api.jiftv.org`: OPTIONS 200 com o cabeçalho de CORS para `jiftv.org` e `jiftv-stream.web.app`, POST
+  chegando ao worker (400 de validação com corpo vazio), 16k mantido no cadastro e foto de 20 KB passando pelo
+  nginx (401 sem login). Detalhes em [integracao-site-institucional.md](integracao-site-institucional.md).
+  Continuam sem teste: um cadastro completo pelo formulário publicado e o envio de foto pelo admin de ponta a
+  ponta (com login e gravação no Cloudinary).
 
 - **Streaming adaptativo e travamentos (2026-10-11)**: conferido no container `media` que o HLS sai com as 4
   qualidades (playlist mestre com 1080p/720p/480p/240p, segmentos de 2 s alinhados entre elas, cada um começando
@@ -408,6 +450,11 @@ Nada disto roda ainda em produção:
 0. **OBS de fora pela ponte `/api/rtmp`** (2026-10-11): testado em containers de teste; falta recriar os
    containers do servidor, republicar o site e testar com o OBS real. Passos em
    [obs-pela-internet.md](obs-pela-internet.md).
+0. **Gráficos no vídeo e controle do OBS** (2026-10-12): só o site mudou. Build sem erros e a página de gráficos
+   conferida com dados de teste (`/overlay/teste?demo=elenco`); os cartões do painel, a leitura ao vivo do
+   Firestore e o obs-websocket **nunca rodaram com um OBS de verdade**. Falta publicar o site e testar.
+   O cartão "Controlar o OBS" só funciona com o painel aberto no computador do OBS (limite do navegador).
+   Detalhes em [overlay-obs.md](overlay-obs.md).
 0. **Câmera do celular pelo navegador** (2026-10-11): servidor no ar (containers recriados, rota conferida pelo
    túnel) e site republicado; o usuário transmitiu de um celular real e relatou que ficou boa.
    Passos em [camera-celular.md](camera-celular.md).

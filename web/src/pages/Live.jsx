@@ -6,6 +6,8 @@ import { subscribeStreamBySlug } from "../services/streams.js";
 import LivePlayer from "../features/live/LivePlayer.jsx";
 import OffAir from "../features/live/OffAir.jsx";
 import Scoreboard from "../features/live/Scoreboard.jsx";
+import Roster from "../features/live/Roster.jsx";
+import { useRosterAthletes } from "../features/live/roster.js";
 import StreamStats from "../features/live/StreamStats.jsx";
 import { useUptime } from "../features/live/useUptime.js";
 import { useViewerPing } from "../features/live/useViewerPing.js";
@@ -44,6 +46,7 @@ export default function Live() {
   const pinged = useViewerPing(stream?.slug, isLive);
   const viewers = Math.max(pinged ?? 0, stream?.viewers ?? 0, isLive ? 1 : 0);
   const others = liveStreams.filter((s) => s.id !== stream?.id);
+  const rosterAthletes = useRosterAthletes(stream?.roster);
 
   // Ao sair do modo cinema, garante que a página não fica com o body preso.
   useEffect(() => {
@@ -172,6 +175,9 @@ export default function Live() {
             </button>
           </header>
           {stream.description && <p className="mt-4 max-w-3xl whitespace-pre-line text-muted">{stream.description}</p>}
+
+          {/* Elenco da partida: foto, nome e número, por equipe. */}
+          <Roster stream={stream} athletesById={rosterAthletes} className="mt-8" />
         </div>
 
         <aside className="space-y-4">

@@ -6,6 +6,8 @@ import { subscribeAllStreams } from "../../services/streams.js";
 import MediaCard from "../../components/ui/MediaCard.jsx";
 import { formatDateTime, toDate, vodDuration, vodSubtitle } from "../../lib/format.js";
 import { isPlayable, vodThumb } from "../../lib/media.js";
+import Roster from "./Roster.jsx";
+import { useRosterAthletes } from "./roster.js";
 
 // Estado vazio da /live: próximas partidas e gravações recentes como atalho.
 // A troca para o player quando uma transmissão começa é feita pela página,
@@ -28,6 +30,7 @@ export default function OffAir({ stream }) {
   }, [streams, stream?.id]);
 
   const ended = stream?.endedAt;
+  const rosterAthletes = useRosterAthletes(stream?.roster);
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-10 md:py-16">
@@ -57,6 +60,9 @@ export default function OffAir({ stream }) {
           <Link to="/catalogo" className="btn-primary">Ver gravações</Link>
         </div>
       </div>
+
+      {/* Quem abre o link antes do jogo já vê o elenco da partida. */}
+      {stream && <Roster stream={stream} athletesById={rosterAthletes} className="mx-auto mt-10 max-w-4xl md:mt-14" />}
 
       {upcoming.length > 0 && (
         <div className="mt-10 md:mt-14">

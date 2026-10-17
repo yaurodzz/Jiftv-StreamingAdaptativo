@@ -3,6 +3,7 @@ import { createStream, updateStream } from "../../services/streams.js";
 import { subscribeModalities } from "../../services/modalities.js";
 import { toDate } from "../../lib/format.js";
 import FormDialog from "./FormDialog.jsx";
+import RosterEditor from "./RosterEditor.jsx";
 import { useToast } from "./ToastProvider.jsx";
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -12,15 +13,18 @@ function toInput(ts) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const empty = { title: "", modalityId: "", location: "", teamA: "", teamB: "", scheduledFor: "", description: "", listed: true };
+const empty = { title: "", modalityId: "", location: "", teamA: "", teamB: "", scheduledFor: "", description: "", listed: true, roster: [] };
 
 // Criação e edição de transmissão. Ao criar, a chave do OBS é gerada no navegador
 // (crypto.getRandomValues) e gravada em `streamKeys`, que só o painel lê.
+// O elenco é opcional e só entra aqui na criação; depois ele é editado no cartão "Elenco"
+// da página da transmissão (updateStream não mexe no elenco).
 export default function StreamForm({ open, stream, onClose, onSaved }) {
   const toast = useToast();
   const [modalities, setModalities] = useState([]);
   const [form, setForm] = useState(empty);
   const [submitting, setSubmitting] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   useEffect(() => subscribeModalities(setModalities), []);
 
@@ -36,6 +40,7 @@ export default function StreamForm({ open, stream, onClose, onSaved }) {
       description: stream.description || "",
       listed: stream.listed !== false,
     } : empty);
+    setRosterOpen(false);
   }, [open, stream]);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
@@ -117,6 +122,32 @@ export default function StreamForm({ open, stream, onClose, onSaved }) {
           <textarea className="input min-h-[84px]" value={form.description} onChange={set("description")} maxLength={4000}
                     placeholder="Informações para quem vai assistir" />
         </label>
+        {!stream && (
+          <details className="rounded-xl border border-line sm:col-span-2" open={rosterOpen} onToggle={(e) => setRosterOpen(e.currentTarget.open)}>
+            <summary className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium max-md:min-h-11">
+              <span>
+                Elenco <span className="font-normal text-muted">(opcional)</span>
+                <span className="block text-xs font-normal text-muted">
+                  {form.roster.length
+                    ? `${form.roster.length} ${form.roster.length === 1 ? "atleta escalado" : "atletas escalados"}`
+                    : "Dá para montar ou mudar depois, na página da transmissão"}
+                </span>
+              </span>
+              <span className="shrink-0 text-xs text-accent">{rosterOpen ? "Fechar" : "Montar agora"}</span>
+            </summary>
+            {rosterOpen && (
+              <div className="border-t border-line p-3">
+                <RosterEditor
+                  value={form.roster}
+                  onChange={(roster) => setForm((f) => ({ ...f, roster }))}
+                  teamA={form.teamA.trim()}
+                  teamB={form.teamB.trim()}
+                  modalityCode={modalities.find((m) => m.id === form.modalityId)?.code}
+                />
+              </div>
+            )}
+          </details>
+        )}
       </div>
     </FormDialog>
   );

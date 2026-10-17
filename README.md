@@ -58,7 +58,7 @@ Modelo de dados (campos principais):
 | Coleção | Quem escreve | Conteúdo |
 |---|---|---|
 | `modalities` | painel | `name`, `code` (3 letras, usado no ID das gravações) |
-| `streams` | painel + worker | `title`, `slug` (nome público no HLS/DASH), modalidade, local, equipes e placar, `scheduledFor`, `listed`, `keyActive`; o worker escreve `isLive`, `startedAt`, `viewers`, `input` (sinal do OBS) |
+| `streams` | painel + worker | `title`, `slug` (nome público no HLS/DASH), modalidade, local, equipes e placar, `roster` (elenco: ids dos atletas e a equipe de cada um), `scheduledFor`, `listed`, `keyActive`; o worker escreve `isLive`, `startedAt`, `viewers`, `input` (sinal do OBS) |
 | `streamKeys` | painel | `streamKey` da transmissão (só admin lê) |
 | `vods` | worker + painel | ID `AAAAMMDD-COD-HHMMSS`; `title`, `recordedAt`, `durationSec`, `localFile`, `visible`, `views`, `playbackUrl`/`thumbnailUrl` (Cloudinary), `cloudinary.status` |
 | `athletes` | worker (cadastro) + painel (moderação) | perfil enviado pelo público; `status` `pending` → `approved`/`rejected`; o público só lê aprovados |
@@ -164,6 +164,9 @@ token do admin, tanto no Firestore (regras) quanto no servidor de mídia (`auth_
   aba mostra quantos cadastros esperam aprovação. O painel mostra a matrícula, avisa quando o nome digitado não
   bate com o do cadastro institucional e marca "Sem foto" com o motivo. Em **Editar** o admin corrige os dados
   e a matrícula, **envia ou troca a foto** (JPEG, PNG ou WebP, até 5 MB) e pode buscar de novo a foto pela matrícula.
+- **Elenco da transmissão**: ao criar uma transmissão (opcional) ou depois, no cartão "Elenco" da página dela no
+  painel, escolha os atletas aprovados de cada equipe. O site mostra foto, nome e número de cada um abaixo do
+  vídeo, com link para o perfil.
 - **Turmas** (Painel → Turmas): as opções do formulário de cadastro.
 - **Tipos de scout** (Painel → Modalidades → Scout): o vocabulário de cada esporte (ex.: `gol`, `assistencia`,
   `falta`), com peso para futuras médias.

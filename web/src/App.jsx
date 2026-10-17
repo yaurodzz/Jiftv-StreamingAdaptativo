@@ -29,6 +29,7 @@ const Scout         = lazy(() => import("./pages/ScoutPage.jsx"));
 const AdminAthletes = lazy(() => import("./pages/admin/Athletes.jsx"));
 const AdminClasses  = lazy(() => import("./pages/admin/Classes.jsx"));
 const NotFound      = lazy(() => import("./pages/NotFound.jsx"));
+const Overlay       = lazy(() => import("./pages/Overlay.jsx"));
 
 export default function App() {
   return (
@@ -39,6 +40,8 @@ export default function App() {
             <ScrollToTop />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
+                {/* Gráficos para o OBS (fonte "Navegador"): sem a casca do site, fundo transparente. */}
+                <Route path="/overlay/:slug" element={<Overlay />} />
                 <Route element={<Layout />}>
                   <Route index element={<Navigate to="/live" replace />} />
                   <Route path="/live" element={<Live />} />

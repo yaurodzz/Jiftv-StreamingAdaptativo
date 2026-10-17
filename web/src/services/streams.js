@@ -4,6 +4,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { generateSlug, generateStreamKey } from "../lib/streamKey.js";
+import { cleanRoster } from "../features/live/roster.js";
 
 // Acesso à coleção `streams` (pública, sem a chave do OBS) e `streamKeys` (só admin).
 // Campos controlados pelo worker do servidor de mídia: isLive, startedAt, endedAt,
@@ -57,6 +58,7 @@ export async function createStream(data, modality) {
   batch.set(ref, {
     ...editableFields(data, modality),
     slug: generateSlug(data.title),
+    roster: cleanRoster(data.roster),
     scoreA: 0,
     scoreB: 0,
     keyActive: true,
@@ -72,6 +74,12 @@ export async function createStream(data, modality) {
 
 export function updateStream(id, data, modality) {
   return updateDoc(doc(db, "streams", id), editableFields(data, modality));
+}
+
+// Elenco da partida: [{ athleteId, team: "A" | "B" }]. Fica fora de editableFields para o
+// formulário "Editar transmissão" não apagar o elenco montado na página da transmissão.
+export function setRoster(id, roster) {
+  return updateDoc(doc(db, "streams", id), { roster: cleanRoster(roster) });
 }
 
 export function setScore(id, scoreA, scoreB) {

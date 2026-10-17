@@ -58,6 +58,14 @@ Em **Painel → Atletas → Editar** (qualquer aba: pendentes, aprovados, rejeit
 As três rotas exigem `Authorization: Bearer <ID token de admin>`. No nginx, `location ^~ /api/atletas/` aceita
 corpo de até 6 MB (o restante de `/api/`, incluindo o cadastro público, continua limitado a 16k).
 
+> **Cuidado ao mexer nesses `location`** (erro real de 2026-10-12): quando existe um `location` de prefixo
+> terminado em barra com `proxy_pass` (`/api/atletas/`), o nginx responde **301** para o mesmo endereço sem a
+> barra (`/api/atletas` → `/api/atletas/`). O cadastro público faz `POST /api/atletas`, o navegador manda antes
+> um `OPTIONS` (preflight de CORS), recebe o 301 e bloqueia tudo ("Redirect is not allowed for a preflight
+> request"). Por isso existe o `location = /api/atletas` exato, nos dois `server`, antes do de prefixo.
+> Para conferir: `curl -i -X OPTIONS http://localhost:8080/api/atletas -H "Origin: https://jiftv.org" -H
+> "Access-Control-Request-Method: POST"` tem de responder 200, nunca 301.
+
 - A foto **nunca passa pelo navegador** de quem cadastra e **não é mostrada a ele** (evita que alguém use o
   formulário para ver a foto de qualquer matrícula).
 - O servidor da escola é quem conversa com a API. O token fica só no `.env` do servidor (nunca no site).

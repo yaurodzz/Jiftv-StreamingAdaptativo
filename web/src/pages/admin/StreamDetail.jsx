@@ -6,7 +6,10 @@ import { subscribeAllVods } from "../../services/vods.js";
 import LivePlayer from "../../features/live/LivePlayer.jsx";
 import { useUptime } from "../../features/live/useUptime.js";
 import StreamConfigCard from "../../features/admin/StreamConfigCard.jsx";
+import BroadcastGraphicsCard from "../../features/admin/BroadcastGraphicsCard.jsx";
+import ObsControlCard from "../../features/admin/ObsControlCard.jsx";
 import StreamForm from "../../features/admin/StreamForm.jsx";
+import StreamRosterCard from "../../features/admin/StreamRosterCard.jsx";
 import ConfirmDialog from "../../features/admin/ConfirmDialog.jsx";
 import { useToast } from "../../features/admin/ToastProvider.jsx";
 import { useClipboard } from "../../features/admin/useClipboard.js";
@@ -172,9 +175,13 @@ export default function StreamDetail() {
             </section>
           )}
 
+          <StreamRosterCard stream={stream} />
+
+          <BroadcastGraphicsCard stream={stream} />
+
           <section className="rounded-2xl border border-line bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold">Gravações <span className="text-sm font-normal text-muted">{recordings.length}</span></h3>
+              <h3 className="font-semibold">Gravações<span className="text-sm font-normal text-muted">{recordings.length}</span></h3>
               {recordings.length > 0 && <Link to="/admin/gravacoes" className="tap text-sm text-accent hover:underline">Gerenciar</Link>}
             </div>
             {recordings.length === 0 ? (
@@ -204,6 +211,7 @@ export default function StreamDetail() {
 
         <aside className="space-y-6">
           <StreamConfigCard stream={stream} />
+          <ObsControlCard stream={stream} />
           <section className="rounded-2xl border border-line bg-surface p-5">
             <h3 className="font-semibold">Link para os espectadores</h3>
             <div className="mt-2 flex gap-2">
